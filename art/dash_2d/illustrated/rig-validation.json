@@ -1,0 +1,102 @@
+{
+  "bones": 20,
+  "weightedMeshes": 16,
+  "packedTextures": 11,
+  "actions": [
+    {
+      "clip": "idle",
+      "loopError": 0.0,
+      "movingBones": [
+        "neutral",
+        "neutral.L",
+        "neutral.R",
+        "neutral.Jaw"
+      ]
+    },
+    {
+      "clip": "listen",
+      "loopError": 1.714505527444786e-17,
+      "movingBones": [
+        "neutral",
+        "neutral.L",
+        "neutral.R",
+        "neutral.Jaw"
+      ]
+    },
+    {
+      "clip": "speak",
+      "loopError": 4.359742437861173e-17,
+      "movingBones": [
+        "sing",
+        "sing.L",
+        "sing.R",
+        "sing.Jaw",
+        "Note.L",
+        "Note.R"
+      ]
+    },
+    {
+      "clip": "wave",
+      "loopError": 6.809035812159264e-17,
+      "movingBones": [
+        "neutral",
+        "neutral.L",
+        "neutral.R",
+        "neutral.Jaw",
+        "Star.L",
+        "Star.R"
+      ]
+    },
+    {
+      "clip": "celebrate",
+      "loopError": 7.298894817891127e-17,
+      "movingBones": [
+        "sing",
+        "sing.L",
+        "sing.R",
+        "sing.Jaw",
+        "Star.L",
+        "Star.R"
+      ]
+    },
+    {
+      "clip": "reconnect",
+      "loopError": 9.797174324372975e-18,
+      "movingBones": [
+        "neutral",
+        "neutral.L",
+        "neutral.R",
+        "neutral.Jaw"
+      ]
+    },
+    {
+      "clip": "sing",
+      "loopError": 4.359742437861173e-17,
+      "movingBones": [
+        "sing",
+        "sing.L",
+        "sing.R",
+        "sing.Jaw",
+        "Note.L",
+        "Note.R"
+      ]
+    },
+    {
+      "clip": "megaphone",
+      "loopError": 4.408728321890747e-18,
+      "movingBones": [
+        "megaphone",
+        "megaphone.L",
+        "megaphone.R",
+        "megaphone.Jaw",
+        "Wave.2",
+        "Wave.3"
+      ]
+    }
+  ],
+  "skins": [
+    "hanbok",
+    "gat",
+    "dancheong"
+  ]
+}

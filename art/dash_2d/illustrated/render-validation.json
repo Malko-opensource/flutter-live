@@ -1,0 +1,290 @@
+[
+  {
+    "skin": "hanbok",
+    "clip": "idle",
+    "frames": 24,
+    "uniqueFrames": 13,
+    "bounds": [
+      107,
+      85,
+      381,
+      448
+    ]
+  },
+  {
+    "skin": "hanbok",
+    "clip": "listen",
+    "frames": 24,
+    "uniqueFrames": 24,
+    "bounds": [
+      107,
+      85,
+      383,
+      449
+    ]
+  },
+  {
+    "skin": "hanbok",
+    "clip": "speak",
+    "frames": 24,
+    "uniqueFrames": 24,
+    "bounds": [
+      81,
+      85,
+      436,
+      449
+    ]
+  },
+  {
+    "skin": "hanbok",
+    "clip": "wave",
+    "frames": 24,
+    "uniqueFrames": 24,
+    "bounds": [
+      81,
+      85,
+      427,
+      449
+    ]
+  },
+  {
+    "skin": "hanbok",
+    "clip": "celebrate",
+    "frames": 24,
+    "uniqueFrames": 24,
+    "bounds": [
+      81,
+      66,
+      427,
+      448
+    ]
+  },
+  {
+    "skin": "hanbok",
+    "clip": "reconnect",
+    "frames": 24,
+    "uniqueFrames": 24,
+    "bounds": [
+      104,
+      85,
+      381,
+      449
+    ]
+  },
+  {
+    "skin": "hanbok",
+    "clip": "sing",
+    "frames": 24,
+    "uniqueFrames": 24,
+    "bounds": [
+      81,
+      85,
+      436,
+      449
+    ]
+  },
+  {
+    "skin": "hanbok",
+    "clip": "megaphone",
+    "frames": 24,
+    "uniqueFrames": 24,
+    "bounds": [
+      99,
+      87,
+      480,
+      448
+    ]
+  },
+  {
+    "skin": "gat",
+    "clip": "idle",
+    "frames": 24,
+    "uniqueFrames": 13,
+    "bounds": [
+      121,
+      80,
+      389,
+      449
+    ]
+  },
+  {
+    "skin": "gat",
+    "clip": "listen",
+    "frames": 24,
+    "uniqueFrames": 24,
+    "bounds": [
+      119,
+      80,
+      392,
+      449
+    ]
+  },
+  {
+    "skin": "gat",
+    "clip": "speak",
+    "frames": 24,
+    "uniqueFrames": 24,
+    "bounds": [
+      81,
+      79,
+      436,
+      449
+    ]
+  },
+  {
+    "skin": "gat",
+    "clip": "wave",
+    "frames": 24,
+    "uniqueFrames": 24,
+    "bounds": [
+      81,
+      80,
+      427,
+      449
+    ]
+  },
+  {
+    "skin": "gat",
+    "clip": "celebrate",
+    "frames": 24,
+    "uniqueFrames": 24,
+    "bounds": [
+      81,
+      60,
+      427,
+      448
+    ]
+  },
+  {
+    "skin": "gat",
+    "clip": "reconnect",
+    "frames": 24,
+    "uniqueFrames": 24,
+    "bounds": [
+      115,
+      80,
+      396,
+      449
+    ]
+  },
+  {
+    "skin": "gat",
+    "clip": "sing",
+    "frames": 24,
+    "uniqueFrames": 24,
+    "bounds": [
+      81,
+      79,
+      436,
+      449
+    ]
+  },
+  {
+    "skin": "gat",
+    "clip": "megaphone",
+    "frames": 24,
+    "uniqueFrames": 24,
+    "bounds": [
+      83,
+      78,
+      480,
+      449
+    ]
+  },
+  {
+    "skin": "dancheong",
+    "clip": "idle",
+    "frames": 24,
+    "uniqueFrames": 13,
+    "bounds": [
+      118,
+      67,
+      386,
+      448
+    ]
+  },
+  {
+    "skin": "dancheong",
+    "clip": "listen",
+    "frames": 24,
+    "uniqueFrames": 24,
+    "bounds": [
+      117,
+      66,
+      388,
+      449
+    ]
+  },
+  {
+    "skin": "dancheong",
+    "clip": "speak",
+    "frames": 24,
+    "uniqueFrames": 24,
+    "bounds": [
+      81,
+      67,
+      436,
+      449
+    ]
+  },
+  {
+    "skin": "dancheong",
+    "clip": "wave",
+    "frames": 24,
+    "uniqueFrames": 24,
+    "bounds": [
+      81,
+      67,
+      427,
+      449
+    ]
+  },
+  {
+    "skin": "dancheong",
+    "clip": "celebrate",
+    "frames": 24,
+    "uniqueFrames": 24,
+    "bounds": [
+      81,
+      47,
+      434,
+      448
+    ]
+  },
+  {
+    "skin": "dancheong",
+    "clip": "reconnect",
+    "frames": 24,
+    "uniqueFrames": 24,
+    "bounds": [
+      114,
+      66,
+      386,
+      449
+    ]
+  },
+  {
+    "skin": "dancheong",
+    "clip": "sing",
+    "frames": 24,
+    "uniqueFrames": 24,
+    "bounds": [
+      81,
+      67,
+      436,
+      449
+    ]
+  },
+  {
+    "skin": "dancheong",
+    "clip": "megaphone",
+    "frames": 24,
+    "uniqueFrames": 24,
+    "bounds": [
+      102,
+      71,
+      480,
+      449
+    ]
+  }
+]

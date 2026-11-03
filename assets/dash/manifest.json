@@ -1,0 +1,25 @@
+{
+  "source": "art/dash_2d/illustrated/dash_2d.blend",
+  "type": "2d-weighted-cutout",
+  "defaultSkin": "hanbok",
+  "skins": [
+    "hanbok",
+    "gat",
+    "dancheong"
+  ],
+  "columns": 6,
+  "rows": 4,
+  "tile": 512,
+  "fps": 12,
+  "frameCount": 24,
+  "clips": [
+    "idle",
+    "listen",
+    "speak",
+    "wave",
+    "celebrate",
+    "reconnect",
+    "sing",
+    "megaphone"
+  ]
+}

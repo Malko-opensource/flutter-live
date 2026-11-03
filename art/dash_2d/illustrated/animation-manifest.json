@@ -1,0 +1,58 @@
+[
+  {
+    "name": "idle",
+    "start": 1,
+    "end": 49,
+    "fps": 24,
+    "renderFrames": 24
+  },
+  {
+    "name": "listen",
+    "start": 61,
+    "end": 109,
+    "fps": 24,
+    "renderFrames": 24
+  },
+  {
+    "name": "speak",
+    "start": 121,
+    "end": 169,
+    "fps": 24,
+    "renderFrames": 24
+  },
+  {
+    "name": "wave",
+    "start": 181,
+    "end": 229,
+    "fps": 24,
+    "renderFrames": 24
+  },
+  {
+    "name": "celebrate",
+    "start": 241,
+    "end": 289,
+    "fps": 24,
+    "renderFrames": 24
+  },
+  {
+    "name": "reconnect",
+    "start": 301,
+    "end": 349,
+    "fps": 24,
+    "renderFrames": 24
+  },
+  {
+    "name": "sing",
+    "start": 361,
+    "end": 409,
+    "fps": 24,
+    "renderFrames": 24
+  },
+  {
+    "name": "megaphone",
+    "start": 421,
+    "end": 469,
+    "fps": 24,
+    "renderFrames": 24
+  }
+]
