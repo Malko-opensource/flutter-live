@@ -1,61 +1,59 @@
 # Flutter Live — Flutter Seoul
 
-macOS 발표용 자막 오버레이와 양방향 대화 화면을 제공하는 Flutter 통역 앱입니다. 두 언어를 지정하면 Gemini Live에 반대 언어로 통역하도록 지시합니다. 현재 발화만 표시하고 대화 기록은 저장하지 않습니다.
+**Tauri 2 + Svelte 5**로 새로 만든 macOS Gemini Live 통역 앱입니다. Flutter 행사용 이름과 Dash 캐릭터를 사용하지만 Flutter SDK에 의존하지 않습니다. 기존 Flutter 앱 코드는 제거했습니다.
 
-![대화 화면](docs/verification/conversation.png)
+지원 언어는 한국어·영어·일본어·중국어입니다. 두 선택 목록에 네 언어가 항상 표시되며 같은 언어를 고르면 양쪽이 교환됩니다.
 
-## 실행
+대화 모드는 두 언어 사이에서 발화 언어를 감지하고 반대 언어로 통역하도록 지시합니다. 프레젠테이션용 자막 오버레이는 원문 언어와 번역 언어를 직접 지정해 한 방향으로 통역합니다. 대화 화면과 독립 자막 오버레이를 제공하며, 현재 원문·번역만 표시하고 대화 기록은 저장하지 않습니다.
 
-macOS 13 이상, Flutter 3.47.9 / Dart 3.13.7, 전체 Xcode가 필요합니다.
+![Tauri 앱 실제 화면](docs/verification/tauri-conversation.jpg)
 
-```sh
-flutter pub get
-flutter run -d macos
-```
+## 개발 실행
 
-빌드된 앱: `build/macos/Build/Products/Debug/Flutter Live.app`.
-
-API 없이 **디자인 미리보기**로 두 화면과 Dash 동작을 확인할 수 있습니다. 실제 통역은 설정에서 자신의 Gemini API 키와 접근 가능한 Live 모델을 입력한 후 시작합니다. 키는 실행 중 메모리에만 보관합니다. 모델 이름은 변경할 수 있습니다. 마이크·시스템 오디오 접근 권한은 macOS에서 승인해야 합니다.
-
-## 모델 설정
-
-오른쪽 위 설정 버튼을 누르면 **모델 연결** 페이지가 열립니다. Gemini API 키를 붙여넣고 계정에서 사용할 수 있는 Live 모델 ID를 입력한 뒤 **설정 적용**을 누르세요. 키는 기본적으로 가려지며 눈 아이콘으로 표시·숨김을 전환합니다. 적용 전에 취소하거나 뒤로 가면 기존 값이 유지됩니다.
-
-키는 이번 앱 실행 중에만 보관합니다. 설정 적용은 연결 검증이나 통역 시작을 수행하지 않습니다. 키와 모델 접근 권한은 통역을 시작할 때 확인됩니다. API 키가 없는 상태에서 통역 시작을 누르면 이 페이지로 이동합니다. 통역 중이거나 일시정지한 세션에서는 연결 설정이 잠기며, 통역을 종료해야 변경할 수 있습니다.
-
-**오디오 · 대쉬** 탭에서 연결된 마이크(블루투스·USB·유선 등), 시스템 오디오, 의상, 확성기 감도를 선택합니다. **자동**은 macOS 기본 입력을 따르며, 장치 연결·해제 시 목록을 갱신합니다. **마이크 테스트**는 API 키 없이 입력 레벨만 확인하며 저장하거나 서버로 보내지 않습니다.
-
-![모델 설정](docs/verification/model-settings.png)
-
-## 구현
-
-- Flutter: 두 언어·모드 선택, 현재 원문/번역, WSS, 자동 재연결, 입력/출력 PCM 순환 버퍼.
-- Swift: 메뉴바, 독립 NSPanel 자막, AVAudioEngine, ScreenCaptureKit, 16 kHz PCM16 mono 20 ms 입력, 24 kHz 출력.
-- 인터럽트: Flutter 큐와 네이티브 예약 재생을 세대 번호와 함께 폐기.
-- Dash: Blender 2D 컷아웃 리그(20개 본·8개 동작)와 한복·갓·단청 3가지 의상. 앱과 네이티브 오버레이는 12 fps 투명 아틀라스를 사용하며 설정에서 의상을 바꿀 수 있습니다.
-
-현재 버전은 얼굴·의상·소품을 하나의 완성형 일러스트로 다시 그린 **2D Dash**입니다. 본·키프레임·텍스처를 포함한 Blender 원본을 제공하고 앱은 렌더된 프레임을 재생합니다. 한복·갓은 선글라스를 벗고, 단청은 선글라스를 유지합니다. 갓 아래 정수리 깃은 숨깁니다. 공개 저장소에는 현재 사용하는 2D 원본과 실행용 에셋을 포함합니다.
-
-## 산출물
-
-- [제품 기획서](docs/product-plan.md), [개발·검증 현황](docs/implementation-status.md)
-- [2D Blender 원본](art/dash_2d/illustrated/dash_2d.blend), [제작·재현 방법](art/dash_2d/README.md)
-- [2D 동작 미리보기](art/dash_2d/illustrated/renders/motion-preview.webp), [3가지 의상·8개 동작](art/dash_2d/illustrated/renders/contact-sheet.jpg)
-
-## 검증
+macOS 13 이상, 전체 Xcode, Node.js 22.12 이상, Rust stable이 필요합니다.
 
 ```sh
-flutter analyze
-flutter test
-flutter build macos --debug
-# macOS 전용 스크린샷 재생성
-flutter test test/ui_snapshot_test.dart --dart-define=CAPTURE_UI=true --update-goldens
+# 내부 Atlas Design Pack에 대한 SSH 접근 권한 필요
+node scripts/prepare-design-pack.mjs
+npm ci
+npm run tauri -- dev
 ```
 
-분석, 20개 자동 테스트(선택적 화면 캡처 1개 제외), macOS Debug 빌드를 통과했습니다. 실제 macOS 앱에서 Bluetooth 이어폰의 재연결 목록 갱신과 PCM 입력 레벨을 확인했습니다. USB·유선 장치, 실제 Gemini 통역, 시스템 캡처 품질, 지연·에코, 행사장 장시간 운영은 아직 검증하지 않았습니다. 음성 복제나 무지연 동시통역은 보장하지 않습니다.
+웹 화면만 확인하려면 `npm run dev`를 사용합니다. 마이크·시스템 오디오·메뉴바·독립 오버레이는 macOS 앱에서만 동작합니다.
 
-## 라이선스와 프로젝트 성격
+이 버전은 내부 디자인 패키지 `@imfacto/svelte`의 **Hansol** 스타일을 직접 사용합니다. 패키지는 `UNLICENSED`이며 공개 저장소에 포함하지 않습니다. 접근 권한 없는 환경에서의 빌드와 공개 배포는 아직 해결되지 않았습니다. [출처 및 준비 방법](vendor/README.md)을 참고하세요.
 
-앱 코드와 이 프로젝트의 기여분은 [MIT License](LICENSE)를 따릅니다. Flutter·Dart·Dash·Gemini 관련 이름과 표장은 각 권리자의 자산이며, 이 프로젝트는 Google의 공식 제품이나 후원 프로젝트가 아닙니다. 캐릭터 에셋의 출처와 범위는 [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md)를 참고하세요.
+## 사용
 
-현재는 개발용 PoC이며 서명·공증된 설치 파일이나 App Store 배포본은 제공하지 않습니다. 실제 통역을 시작하면 선택한 오디오가 사용자의 API 키를 통해 Google Gemini API로 전송되며 해당 API 이용 요금과 정책이 적용됩니다.
+1. 설정 → 모델 연결에서 API 키와 사용 가능한 Live 모델 ID를 입력합니다. 기본값은 `gemini-3.8-live`입니다. [공식 모델 안내](https://ai.google.dev/gemini-api/docs/models/gemini-3.8-live)
+2. 오디오 · 대쉬에서 입력 소스와 마이크를 선택합니다. **자동**은 macOS 기본 입력을 따릅니다. 연결 목록은 Core Audio에서 갱신합니다.
+3. 대화 모드에서는 두 언어를, 자막 오버레이에서는 원문·번역 언어를 선택하고 통역을 시작합니다. 통역 중 모드를 바꾸면 기존 연결이 종료되므로 다시 시작해야 합니다. 자막 오버레이 모드에서는 번역 음성이 기본으로 꺼집니다.
+4. 설정 적용은 연결을 시작하지 않습니다. API 키는 이번 실행의 메모리에만 보관하며 앱 종료 시 사라집니다.
+
+**디자인 미리보기**는 녹음·API 호출 없이 예시 자막과 세 의상·여덟 동작을 확인합니다. **마이크 테스트**도 서버 전송 없이 로컬 입력만 확인합니다. 앱 창을 닫아도 메뉴바에서 계속 실행되며 메뉴바의 종료로 앱을 끝냅니다.
+
+## 구성
+
+- `src/`: Svelte 화면, 현재 자막, 세션 상태, Gemini WSS, bounded reconnect queue.
+- `src-tauri/`: Rust 메뉴바·창 관리와 Swift 오디오 호스트 연결.
+- `src-tauri/native/AudioHost.swift`: Core Audio 입력 장치, AVAudioEngine 캡처·재생, ScreenCaptureKit.
+- `public/dash/`: 기존에 제작한 2D Dash 투명 애니메이션. 한복·갓·단청, 8개 클립, 12fps.
+- `art/`: 편집 가능한 캐릭터 제작 원본. 앱 실행에는 Blender가 필요하지 않습니다.
+
+입력은 16kHz PCM16 mono 20ms(640바이트), 출력은 24kHz PCM16 mono입니다. 재연결 입력은 최대 2초, 네이티브 예약 재생도 최대 2초로 제한합니다. 서버 인터럽트는 예약 재생을 즉시 비웁니다. 스피커 에코 제거, 음성 복제, 무지연 통역을 보장하지 않습니다.
+
+## 빌드와 검증
+
+```sh
+npm run check
+npm test
+npm run tauri -- build --debug
+```
+
+앱 위치: `src-tauri/target/debug/bundle/macos/Flutter Live.app`
+
+[제품 기획서](docs/product-plan.md), [현재 검증 범위](docs/implementation-status.md), [디자인 기준](DESIGN.md)을 참고하세요. 실제 Gemini 통역은 사용자 키로 별도 검증해야 합니다. 이 버전은 서명·공증된 배포본이 아닙니다.
+
+## 라이선스
+
+이 프로젝트의 원본 코드는 [MIT](LICENSE)입니다. 내부 디자인 패키지와 제삼자 캐릭터·상표에는 MIT를 적용하지 않습니다. [Third-party notices](THIRD_PARTY_NOTICES.md)를 참고하세요. Google의 공식 제품이 아닙니다.

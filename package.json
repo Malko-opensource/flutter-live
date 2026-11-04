@@ -1,0 +1,28 @@
+{
+  "name": "flutter-live",
+  "private": true,
+  "version": "0.2.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite --host 127.0.0.1",
+    "build": "vite build",
+    "check": "svelte-check --tsconfig ./tsconfig.json",
+    "test": "vitest run",
+    "tauri": "tauri"
+  },
+  "dependencies": {
+    "@imfacto/svelte": "file:vendor/imfacto-svelte-0.1.0.tgz",
+    "@tauri-apps/api": "^2",
+    "lucide-svelte": "^0.468.0",
+    "svelte": "^5.33.0"
+  },
+  "devDependencies": {
+    "@sveltejs/vite-plugin-svelte": "^6",
+    "@tauri-apps/cli": "^2",
+    "svelte-check": "^4",
+    "typescript": "^5.9",
+    "vite": "^7",
+    "vitest": "^3",
+    "@types/node": "^22"
+  }
+}
