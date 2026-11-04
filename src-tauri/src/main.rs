@@ -72,12 +72,33 @@ fn show_overlay(app: tauri::AppHandle, visible: bool) -> Result<(), String> {
     }
     Ok(())
 }
+#[tauri::command]
+fn resize_overlay(app: tauri::AppHandle, height: f64) -> Result<(), String> {
+    if !height.is_finite() {
+        return Err("잘못된 자막 크기".into());
+    }
+    if let Some(w) = app.get_webview_window("overlay") {
+        let scale = w.scale_factor().map_err(|e| e.to_string())?;
+        let size = w.inner_size().map_err(|e| e.to_string())?;
+        let position = w.outer_position().map_err(|e| e.to_string())?;
+        let height = height.clamp(160.0, 340.0);
+        w.set_size(tauri::LogicalSize::new(size.width as f64 / scale, height))
+            .map_err(|e| e.to_string())?;
+        w.set_position(tauri::LogicalPosition::new(
+            position.x as f64 / scale,
+            (position.y as f64 / scale + size.height as f64 / scale - height).max(0.0),
+        ))
+        .map_err(|e| e.to_string())?;
+    }
+    Ok(())
+}
 fn main() {
     tauri::Builder::default()
         .invoke_handler(tauri::generate_handler![
             audio_command,
             show_main,
-            show_overlay
+            show_overlay,
+            resize_overlay
         ])
         .setup(|app| {
             let _ = APP.set(app.handle().clone());

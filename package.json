@@ -11,7 +11,7 @@
     "tauri": "tauri"
   },
   "dependencies": {
-    "@imfacto/svelte": "file:vendor/imfacto-svelte-0.1.0.tgz",
+    "@imfacto/svelte": "file:vendor/imfacto-svelte-0.1.0-765b3c4.tgz",
     "@tauri-apps/api": "^2",
     "lucide-svelte": "^0.468.0",
     "svelte": "^5.33.0"

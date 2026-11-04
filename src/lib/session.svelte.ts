@@ -1,3 +1,5 @@
+import {previewFrame} from './preview';
+import {appearance} from './appearance.svelte';
 import {detectedLanguage,supportedLanguages,selectLanguage} from './interpreter';
 import {invoke,isTauri} from '@tauri-apps/api/core';
 import {listen,emitTo} from '@tauri-apps/api/event';
@@ -27,7 +29,7 @@ export async function init(){if(initialized||!isTauri())return;initialized=true;
   if(!session.testing){client.audio(m.data);if(v.db>settings.threshold)loudMs+=20;else loudMs=0;if(v.db>-38){session.clip=loudMs>=100?'megaphone':'sing';clearTimeout(quiet);quiet=setTimeout(()=>session.clip='listen',450);}}
  }
  });await listen('stop',()=>void stop());await listen('overlay-ready',()=>void syncOverlay());await listen('overlay-hidden',()=>session.overlay=false);await refreshDevices();}
-export function snapshot(){return {original:session.original,translation:session.translation,label:`${languages.find(l=>l.code===session.first)?.label} ${session.mode==='overlay'?'→':'↔'} ${languages.find(l=>l.code===session.second)?.label} · ${languageStatus()}`,skin:settings.skin,clip:session.clip,animate:active()||session.phase==='preview',preview:session.phase==='preview'};}
+export function snapshot(){return {appearance:{...appearance},original:session.original,translation:session.translation,label:`${languages.find(l=>l.code===session.first)?.label} ${session.mode==='overlay'?'→':'↔'} ${languages.find(l=>l.code===session.second)?.label} · ${languageStatus()}`,skin:settings.skin,clip:session.clip,animate:active()||session.phase==='preview',preview:session.phase==='preview'};}
 export async function syncOverlay(){if(isTauri())await emitTo('overlay','caption',snapshot());}
 async function onLive(e:LiveEvent){
  switch(e.type){
@@ -56,7 +58,11 @@ export async function stop(phase:Phase='idle'){
 async function fail(message:string){await stop('error');session.error=message;}
 export async function start(){if(active())return;await stop();if(!settings.key.trim()){session.error='설정에서 Gemini API 키를 입력해 주세요.';return;}finishedInput=false;finishedOutput=false;client.start({mode:session.mode==='overlay'?'presentation':'conversation',key:settings.key.trim(),model:settings.model.trim(),firstCode:session.first,secondCode:session.second,first:languages.find(l=>l.code===session.first)!.name,second:languages.find(l=>l.code===session.second)!.name});}
 export async function microphoneTest(uid:string){if(locked())return;await stop();session.testing=true;try{await audio({op:'start',source:'microphone',uid});}catch{await fail('마이크 테스트는 macOS 앱에서 사용할 수 있습니다.');}}
-export async function preview(){await stop();session.phase='preview';session.original='Flutter 밋업에 오신 것을 환영합니다!';session.translation='Welcome to our Flutter meetup!';const clips=['wave','celebrate','sing','megaphone','listen','speak','idle','reconnect'];let index=0;session.clip=clips[0];timer=setInterval(()=>{session.clip=clips[++index%clips.length];void syncOverlay();},3500);void syncOverlay();}
+export async function preview(){
+ await stop();session.phase='preview';const began=Date.now();const reduced=typeof matchMedia==='function'&&matchMedia('(prefers-reduced-motion: reduce)').matches;
+ const update=()=>{const frame=previewFrame(Date.now()-began,session.first,session.second,reduced);session.original=frame.original;session.translation=frame.translation;session.clip=frame.clip;void syncOverlay();if(frame.done)clearInterval(timer)};
+ if(!reduced)timer=setInterval(update,80);update();
+}
 export async function setMode(mode:string){if(mode===session.mode)return;const wasLocked=locked();if(wasLocked)await stop();session.mode=mode;session.detected='';if(wasLocked)session.notice='모드가 변경됐습니다. 언어를 확인하고 통역을 다시 시작해 주세요.';session.voice=mode==='conversation';await safeAudio({op:'volume',value:session.voice?session.volume:0});if(!session.voice)await safeAudio({op:'clear'});}
 export async function setVoice(value:boolean){session.voice=value;await safeAudio({op:'volume',value:value?session.volume:0});if(!value)await safeAudio({op:'clear'});}
 export async function setVolume(value:number){session.volume=value;await safeAudio({op:'volume',value:session.voice?value:0});}

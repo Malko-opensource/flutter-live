@@ -1,24 +1,32 @@
 # Flutter Live design
 
-2026-11-04. Tauri + Svelte migration. The user's selected theme is Hansol.
+2026-11-04. The user selected the new **Linear** style from Atlas Design Pack.
+The app stays Tauri + Svelte. Use the actual `@imfacto/svelte` Linear provider,
+Button, Input, Select and Tabs from commit
+`765b3c44515a59578347c595bfefaff24b19f694` (see `vendor/README.md`).
 
-Use the actual Atlas Design Pack `@imfacto/svelte` provider with `design="hansol"`
-and `mode="light"`, including Button, Input, Select and Tabs. The pinned upstream
-commit and local dependency preparation are in `vendor/README.md`.
+Default dark: near-black surfaces, off-white text, hairline dividers. One lime
+primary action per screen. Hierarchy uses spacing, tracking and weights 400–600.
+No heavy shadows or decorative gradients. Light and OS-following modes are also
+supported. Use provider semantic tokens and the user's chosen font/size globally,
+including portaled menus. The app uses its own Dash assets, not Linear logos.
 
-White workspace, quiet gray chrome, charcoal text, restrained blue action. Keep
-one primary action in the bottom control bar. Use semantic pack tokens, Noto Sans
-KR, compact controls, subtle separators, and no decorative gradients or dashboard
-cards. Respect keyboard focus and reduced motion.
+Keep two modes and no history: current conversation, fixed-direction presentation
+overlay. The current translation is the focal content. Dash remains a companion.
+Retain hanbok, gat and dancheong and the existing 8 animated clips.
 
-The app has two modes, no history view: conversation (current translation and
-original), and caption overlay (dark translucent bar on a presentation). Model
-and audio settings have explicit apply/cancel. A key is masked and memory-only.
+Appearance settings preview changes immediately; Apply saves only whitelisted
+appearance properties locally, Cancel restores the prior state. Credentials and
+transcripts must never enter that storage record. The independent overlay gets
+font, theme and size through the caption event and expands for large text.
 
-Retain the approved 2D Dash artwork: hanbok, gat and dancheong, 8 animation clips.
-Dash is a contextual companion, not a replacement for the translated text.
-The independent overlay intentionally uses dark high-contrast caption styling.
+The user requested Stageshow (https://benji.org/stageshow). Its craft, visual
+hierarchy and system-story choreography guide the actual Svelte interface and
+presentation preview. Use existing product components, not a React app rewrite.
+The preview tells one 8-second story: source speech appears, translation follows,
+then the completed result holds. Reduced motion shows the final frame immediately.
+See `docs/design-rehearsal.md` for the reference and review evidence.
 
-Review at 900×760 and minimum 680×600. Settings and long captions scroll inside
-the workspace; bottom controls stay visible. Preview must be labeled as sample
-content and must not record or call Gemini.
+Review at 900×760 and 680×600, light/dark, maximum typography. Workspace scrolls;
+bottom actions remain accessible. Do not call a screenshot or unit fixture proof
+of actual Gemini translation quality.
