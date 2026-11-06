@@ -6,6 +6,14 @@ export type LanguagePair = {
   secondCode: string;
 };
 
+// Keep model policy out of user preferences. Both modes currently use the
+// instruction-capable Live model: presentation retains its explicit source
+// language and conversation retains per-utterance direction switching.
+export const modeModels = Object.freeze({
+  conversation: 'gemini-3.8-live',
+  presentation: 'gemini-3.8-live',
+} satisfies Record<LanguagePair['mode'], string>);
+
 export function interpreterInstruction(pair: LanguagePair): string {
   if (pair.mode === 'presentation') {
     return `You are a simultaneous presentation interpreter.

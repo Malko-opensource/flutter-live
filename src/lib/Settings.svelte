@@ -15,9 +15,8 @@
  async function apply(){
   if(!locked()){
    if(/\s/.test(draft.key.trim())){error='API 키 안의 공백이나 줄바꿈을 지워 주세요.';tab='model';return;}
-   if(!/^(models\/)?[a-zA-Z0-9._-]+$/.test(draft.model.trim())){error='사용할 Live 모델 ID를 입력해 주세요.';tab='model';return;}
    if(!persistAppearance()){appearanceError='표시 설정을 저장하지 못했습니다. 다시 적용해 주세요.';tab='appearance';return;}
-   if(session.testing)await stop();Object.assign(settings,{...draft,key:draft.key.trim(),model:draft.model.trim()});
+   if(session.testing)await stop();Object.assign(settings,{...draft,key:draft.key.trim()});
   }else{if(!persistAppearance()){appearanceError='표시 설정을 저장하지 못했습니다.';tab='appearance';return;}settings.skin=draft.skin;settings.threshold=draft.threshold;}
   accepted=true;void syncOverlay();onclose();
  }
@@ -29,12 +28,12 @@
  <Tabs bind:value={tab} class="settings-tabs"><TabsList variant="line" aria-label="설정 분류"><TabsTrigger value="model">모델 연결</TabsTrigger><TabsTrigger value="audio">오디오 · 대쉬</TabsTrigger><TabsTrigger value="appearance">화면 · 자막</TabsTrigger></TabsList>
  <div class="settings-scroll">
  <TabsContent value="model">
-  <div class="section-heading"><h2>Gemini Live</h2><p>실시간 통역에 사용할 모델을 연결합니다.</p></div>
+  <div class="section-heading"><h2>Gemini Live</h2><p>API 키를 입력하면 선택한 모드에 맞춰 연결합니다.</p></div>
   {#if locked()}<p class="notice">통역을 종료하면 연결 설정을 변경할 수 있습니다.</p>{/if}
   <div class="field"><label for="api-key">API 키</label><Input id="api-key" type={showKey?'text':'password'} bind:value={draft.key} disabled={locked()} placeholder="Google AI Studio에서 발급한 키" autocomplete="off" spellcheck={false}>
    {#snippet trailing()}<Button variant="ghost" size="icon-sm" aria-label={showKey?'API 키 숨기기':'API 키 보기'} onclick={()=>showKey=!showKey}>{#if showKey}<EyeOff size={16}/>{:else}<Eye size={16}/>{/if}</Button>{/snippet}
   </Input><p class="help">키는 이번 실행에서만 사용하며 앱을 종료하면 지워집니다.</p></div>
-  <div class="field"><label for="model-id">Live 모델 ID</label><Input id="model-id" bind:value={draft.model} disabled={locked()} spellcheck={false}/><p class="help">모델 접근 권한과 API 키는 통역 시작 시 확인합니다.</p></div>
+  <p class="help">대화 화면과 자막 오버레이의 모델은 앱에서 설정합니다. 별도로 입력할 필요가 없습니다.</p>
   {#if error}<p class="error" role="alert">{error}</p>{/if}
   <div class="settings-note"><span class="note-dot"></span><p>통역을 시작하면 선택한 오디오가 Gemini로 전송됩니다.<br/>현재 발화만 표시하며 대화 기록은 저장하지 않습니다.</p></div>
  </TabsContent>

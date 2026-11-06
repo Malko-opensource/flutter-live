@@ -1,7 +1,7 @@
 import {describe,it,expect,vi,afterEach} from 'vitest';
 import {LiveClient,setup,measurePCM,type SocketLike,type LiveEvent} from '../src/lib/live';
 class Socket implements SocketLike {readyState=1;bufferedAmount=0;onopen:SocketLike['onopen']=null;onmessage:SocketLike['onmessage']=null;onerror:SocketLike['onerror']=null;onclose:SocketLike['onclose']=null;sent:string[]=[];send(data:string){this.sent.push(data)}close(){this.readyState=3}message(value:unknown){this.onmessage?.({data:JSON.stringify(value)} as MessageEvent)}}
-const config={mode:'conversation' as const,key:'test-secret',model:'test-live',first:'Korean',second:'English',firstCode:'ko',secondCode:'en'};
+const config={mode:'conversation' as const,key:'test-secret',first:'Korean',second:'English',firstCode:'ko',secondCode:'en'};
 afterEach(()=>vi.useRealTimers());
 describe('Live stream lifecycle',()=>{
  it('gates audio on setup and bounds reconnect memory',()=>{vi.useFakeTimers();const s=new Socket();const client=new LiveClient(()=>{},()=>s);client.start(config);s.onopen?.(new Event('open'));for(let i=0;i<150;i++)client.audio('pcm');expect(client.bufferedChunks).toBe(100);vi.advanceTimersByTime(20);expect(s.sent.length).toBe(1);s.message({setupComplete:{}});vi.advanceTimersByTime(20);expect(s.sent.length).toBe(5);expect(client.bufferedChunks).toBe(96);client.stop();});
@@ -10,7 +10,7 @@ describe('Live stream lifecycle',()=>{
  it('never exposes provider error details or keys',()=>{vi.useFakeTimers();const s=new Socket();const events:LiveEvent[]=[];const c=new LiveClient(e=>events.push(e),()=>s);c.start(config);s.message({error:{code:403,message:'test-secret'}});expect(events.at(-1)?.type).toBe('error');expect(JSON.stringify(events)).not.toContain('test-secret');c.stop();});
  it('ignores stale responses after stop',()=>{vi.useFakeTimers();const s=new Socket();const events:LiveEvent[]=[];const c=new LiveClient(e=>events.push(e),()=>s);c.start(config);c.stop();s.message({setupComplete:{},serverContent:{outputTranscription:{text:'late'}}});expect(events).toHaveLength(1)});
 });
-it('sets two-way interpreter constraints and audio transcripts',()=>{const s=setup(config).setup;expect(s.model).toBe('models/test-live');expect(s.systemInstruction.parts[0].text).toContain('Korean and English');expect(s).toHaveProperty('inputAudioTranscription');expect(s).toHaveProperty('outputAudioTranscription')});
+it('sets two-way interpreter constraints and audio transcripts',()=>{const s=setup(config).setup;expect(s.model).toBe('models/gemini-3.8-live');expect(s.systemInstruction.parts[0].text).toContain('Korean and English');expect(s).toHaveProperty('inputAudioTranscription');expect(s).toHaveProperty('outputAudioTranscription')});
 it('measures PCM16 silence and amplitude',()=>{expect(measurePCM(btoa('\0'.repeat(640))).db).toBe(-96);const raw=String.fromCharCode(0,32).repeat(320);expect(measurePCM(btoa(raw)).db).toBeCloseTo(-12.04,1)});
 
 it('bounds input even while the socket send buffer is congested',()=>{vi.useFakeTimers();const s=new Socket();const c=new LiveClient(()=>{},()=>s);c.start(config);s.message({setupComplete:{}});s.bufferedAmount=65536;for(let i=0;i<200;i++)c.audio('pcm');vi.advanceTimersByTime(100);expect(s.sent).toHaveLength(0);expect(c.bufferedChunks).toBe(100);s.bufferedAmount=0;vi.advanceTimersByTime(20);expect(s.sent).toHaveLength(4);c.stop()});
@@ -37,4 +37,12 @@ it('passes server language metadata and interim rewrites without guessing from t
  s.message({serverContent:{inputTranscription:{text:'안녕',languageCode:'ko-KR'},interimInputTranscription:{text:'stale'}}});
  s.message({serverContent:{inputTranscription:{text:'Hello',languageCode:'en-US'}}});
  expect(events.filter(e=>e.type==='input'||e.type==='interim').map(e=>[e.type,e.text,e.languageCode])).toEqual([['interim','안','ko-KR'],['input','안녕','ko-KR'],['input','Hello','en-US']]);c.stop();
+});
+
+it('pins the model for each mode even when stale callers include a model override',()=>{
+ for(const mode of ['conversation','presentation'] as const){
+  const stale={...config,mode,model:'unexpected-model'};
+  expect(setup(stale).setup.model).toBe('models/gemini-3.8-live');
+  expect(setup(stale,'resume').setup.model).toBe('models/gemini-3.8-live');
+ }
 });

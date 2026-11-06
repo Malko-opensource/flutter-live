@@ -19,6 +19,7 @@ describe('mode-specific session contract',()=>{
   settings.key='fixture';await start();wire.receive({type:'connecting'});const calls=wire.stop.mock.calls.length;
   await setMode('overlay');
   expect(wire.stop.mock.calls.length).toBeGreaterThan(calls);expect(session.phase).toBe('idle');expect(session.notice).toContain('다시 시작');
+  expect(wire.config).not.toHaveProperty('model');expect(settings).not.toHaveProperty('model');
   expect(wire.config?.mode).toBe('conversation'); // No silent restart or extra provider call.
   await start();expect(wire.config?.mode).toBe('presentation');
  });
