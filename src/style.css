@@ -24,3 +24,13 @@ input[type=range]{appearance:none;height:4px;border-radius:2px;background:var(--
 
 /* Reserve predictable line boxes when the caption window grows. */
 .caption-meta,.caption-original{line-height:1.5}
+
+/* Follow newest lines in bounded viewports; keep full literal captions in the DOM. */
+.caption-translation,.preview-caption strong{display:block;-webkit-line-clamp:unset;-webkit-box-orient:initial;white-space:pre-wrap;overflow-wrap:anywhere;overflow:hidden;overflow-anchor:none;text-overflow:clip}
+.caption-translation{max-height:2.8em}
+.preview-caption strong{max-height:3em}
+.caption-original,.preview-caption p{white-space:pre-wrap;overflow-wrap:anywhere;line-height:1.5;max-height:1.5em;overflow:hidden;overflow-anchor:none;text-overflow:clip}
+.preview-caption>div:last-child{flex:1}
+.conversation-copy{width:100%;min-width:0}
+.conversation-copy h1{max-height:min(6em,30vh);overflow:auto;overflow-anchor:none;scroll-behavior:auto}
+.conversation-copy p{max-height:min(5.1em,15vh);overflow:auto;overflow-anchor:none;scroll-behavior:auto}

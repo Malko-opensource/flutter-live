@@ -10,7 +10,7 @@ vi.mock('../src/lib/live',()=>({
 vi.mock('@tauri-apps/api/core',()=>({isTauri:()=>true,invoke:vi.fn(async()=>{})}));
 vi.mock('@tauri-apps/api/event',()=>({emitTo:vi.fn(async()=>{}),listen:vi.fn(async(name:string,handler:typeof wire.capture)=>{if(name==='audio')wire.capture=handler;return ()=>{}})}));
 vi.mock('@tauri-apps/api/window',()=>({getCurrentWindow:()=>({hide:wire.hide})}));
-import {session,settings,init,start,stop,setMode,snapshot,languageStatus,chooseLanguage,languages,showOverlay,preview} from '../src/lib/session.svelte';
+import {session,settings,init,start,stop,setMode,snapshot,languageStatus,chooseLanguage,languages,showOverlay,preview,setVoice} from '../src/lib/session.svelte';
 afterEach(async()=>{await stop();session.overlay=false;session.voice=true;session.mode='conversation';session.first='ko';session.second='en';settings.key='';wire.config=undefined;vi.useRealTimers();vi.clearAllMocks()});
 describe('mode-specific session contract',()=>{
  it('starts the presentation with the selected source and target',async()=>{
@@ -29,7 +29,7 @@ describe('mode-specific session contract',()=>{
  it('shows only metadata-backed detection in conversation and replaces interim captions',async()=>{
   wire.receive({type:'interim',text:'안',languageCode:'ko-KR'});wire.receive({type:'interim',text:'안녕하세요',languageCode:'ko-KR'});
   expect(session.original).toBe('안녕하세요');expect(languageStatus()).toBe('한국어 감지');
-  wire.receive({type:'input',text:'안녕하세요',languageCode:'ko-KR'});expect(session.original).toBe('안녕하세요');
+  wire.receive({type:'input',text:'안녕하세요',languageCode:'ko-KR',finished:true});expect(session.original).toBe('안녕하세요');
   wire.receive({type:'complete'});wire.receive({type:'input',text:'Hello',languageCode:'en-US'});
   expect(session.original).toBe('Hello');expect(languageStatus()).toBe('English 감지');
  });
@@ -156,5 +156,64 @@ describe('continuous capture across silence and transport recovery',()=>{
   await init();settings.key='fixture';await start();await wire.receive({type:'ready'});await stop();wire.audio.mockClear();
   wire.capture({payload:{type:'pcm',data:'late-pcm'}});
   expect(wire.audio).not.toHaveBeenCalled();expect(session.phase).toBe('idle');
+ });
+});
+
+
+describe('bounded native output failure and interruption',()=>{
+ it('keeps capture and captions running after a visible native output failure',async()=>{
+  await init();settings.key='fixture';await start();await wire.receive({type:'ready'});
+  await wire.receive({type:'input',text:'Original'});await wire.receive({type:'output',text:'번역'});
+  const phase=session.phase;wire.stop.mockClear();wire.audio.mockClear();vi.mocked(invoke).mockClear();
+  wire.capture({payload:{type:'output-error',message:'출력 한도 초과: 음성 출력을 껐습니다.'}});
+  expect(session.voice).toBe(false);expect(session.error).toContain('출력 한도 초과');
+  expect(session.phase).toBe(phase);expect(session.original).toBe('Original');expect(session.translation).toBe('번역');
+  wire.capture({payload:{type:'pcm',data:'ongoing-input'}});
+  expect(wire.audio).toHaveBeenCalledWith('ongoing-input');expect(wire.stop).not.toHaveBeenCalled();
+  await wire.receive({type:'audio',data:'no-play-after-failure'});
+  expect(invoke).not.toHaveBeenCalledWith('audio_command',{command:{op:'play',data:'no-play-after-failure'}});
+  await wire.receive({type:'output',text:' 계속'});await wire.receive({type:'complete'});
+  expect(session.translation).toBe('번역 계속');expect(session.error).toContain('출력 한도 초과');
+  vi.mocked(invoke).mockClear();await setVoice(true);
+  expect(vi.mocked(invoke).mock.calls.slice(0,2)).toEqual([
+   ['audio_command',{command:{op:'clear'}}],['audio_command',{command:{op:'volume',value:session.volume}}]
+  ]);
+ });
+ it('marks interruption before awaiting native clear, preserving the new turn',async()=>{
+  await wire.receive({type:'output',text:'Old translation'});
+  let release!:()=>void;
+  vi.mocked(invoke).mockImplementationOnce(()=>new Promise<void>(resolve=>{release=resolve}));
+  const interrupted=wire.receive({type:'interrupted'});
+  expect(session.phase).toBe('listening');
+  await wire.receive({type:'output',text:'New translation'});
+  expect(session.translation).toBe('New translation');expect(session.phase).toBe('translating');
+  release();await interrupted;
+  expect(session.translation).toBe('New translation');expect(session.phase).toBe('translating');
+ });
+});
+
+
+describe('independent input transcription boundaries',()=>{
+ it('appends late and repeated input deltas after output completion without guessing a new source turn',async()=>{
+  settings.key='fixture';await start();await wire.receive({type:'ready'});
+  await wire.receive({type:'input',text:'Hello'});await wire.receive({type:'output',text:'안녕하세요'});
+  await wire.receive({type:'complete'});
+  expect(session.original).toBe('Hello');expect(session.translation).toBe('안녕하세요');
+  await wire.receive({type:'input',text:' world'});
+  expect(session.original).toBe('Hello world');expect(session.translation).toBe('안녕하세요');
+  await wire.receive({type:'output',text:'다음 번역'});await wire.receive({type:'complete'});
+  await wire.receive({type:'input',text:' world'});
+  expect(session.original).toBe('Hello world world');expect(session.translation).toBe('다음 번역');
+ });
+ it('keeps a bounded 6000-character rolling input across output turns',async()=>{
+  settings.key='fixture';await start();
+  await wire.receive({type:'input',text:'a'.repeat(5999)});await wire.receive({type:'complete'});
+  await wire.receive({type:'input',text:'BCD'});
+  expect(session.original).toBe('a'.repeat(5997)+'BCD');
+ });
+ it('does not erase a connection error when voice is re-enabled',async()=>{
+  await wire.receive({type:'error',text:'Connection failed'});
+  await setVoice(true);
+  expect(session.error).toBe('Connection failed');expect(session.phase).toBe('error');
  });
 });

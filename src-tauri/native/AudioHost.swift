@@ -38,8 +38,7 @@ private final class AudioHost: NSObject, SCStreamOutput, SCStreamDelegate {
     private var observer: NSObjectProtocol?
     private var restart: DispatchWorkItem?
     private var listener: AudioObjectPropertyListenerBlock?
-    private var outputEpoch = 0
-    private var scheduled = 0
+    private var playback = PlaybackBudget()
     // Converter and input bytes are confined to queue.
     private var converter: AVAudioConverter?
     private var format: AVAudioFormat?
@@ -71,7 +70,10 @@ private final class AudioHost: NSObject, SCStreamOutput, SCStreamDelegate {
             }
         case "stop": stop()
         case "play":
-            if let raw = c["data"] as? String, let bytes = Data(base64Encoded: raw) { play(bytes) }
+            if let raw = c["data"] as? String,
+               raw.utf8.count <= PlaybackBudget.maxFrames * 2 * 4 / 3 + 4,
+               let bytes = Data(base64Encoded: raw) { play(bytes) }
+            else { outputFailure("음성 출력 데이터가 잘못되었거나 출력 한도를 초과했습니다.") }
         case "clear": clear()
         case "volume": player.volume = Float(c["value"] as? Double ?? 0.7)
         default: break
@@ -185,12 +187,21 @@ private final class AudioHost: NSObject, SCStreamOutput, SCStreamDelegate {
             DispatchQueue.main.async{[weak self] in guard self?.epoch==e else{return};send(["type":"pcm","data":chunk.base64EncodedString()])}
         }
     }
-    private func clear(){outputEpoch += 1;player.stop();scheduled=0}
+    private func clear(){playback.clear();player.stop()}
+    private func outputFailure(_ message: String){
+        guard !playback.failed else {return}
+        playback.fail();player.stop()
+        send(["type":"output-error","message":message + " 음성 출력을 껐습니다. 자막과 입력은 계속됩니다. 다시 켜서 재시도할 수 있습니다."])
+    }
     private func play(_ data:Data){
-        let n=data.count/2;guard n>0,data.count%2==0,n<=48000,scheduled+n<=48000,let b=AVAudioPCMBuffer(pcmFormat:outputFormat,frameCapacity:AVAudioFrameCount(n)),let dst=b.floatChannelData?[0] else{return}
+        guard !playback.failed else {return}
+        let n=data.count/2
+        guard n>0,data.count%2==0 else {outputFailure("음성 출력 데이터가 올바른 PCM 형식이 아닙니다.");return}
+        guard let ticket=playback.admit(n) else {outputFailure("음성 출력 대기량이 한도(30초 또는 4096개 조각)를 초과해 대기 중인 음성을 취소했습니다.");return}
+        guard let b=AVAudioPCMBuffer(pcmFormat:outputFormat,frameCapacity:AVAudioFrameCount(n)),let dst=b.floatChannelData?[0] else {outputFailure("음성 출력 버퍼를 만들지 못했습니다.");return}
         b.frameLength=AVAudioFrameCount(n);data.withUnsafeBytes{raw in for i in 0..<n{dst[i]=Float(Int16(bitPattern:UInt16(raw[i*2]) | UInt16(raw[i*2+1])<<8))/32768}}
-        do{if !output.isRunning{try output.start()}}catch{send(["type":"output-error","message":"음성 출력을 시작하지 못했습니다."]);return}
-        let e=outputEpoch;scheduled += n;player.scheduleBuffer(b,completionCallbackType:.dataPlayedBack){[weak self] _ in DispatchQueue.main.async{guard let self=self,self.outputEpoch==e else{return};self.scheduled=max(0,self.scheduled-n)}}
+        do{if !output.isRunning{try output.start()}}catch{outputFailure("음성 출력을 시작하지 못했습니다.");return}
+        player.scheduleBuffer(b,completionCallbackType:.dataPlayedBack){[weak self] _ in DispatchQueue.main.async{self?.playback.complete(ticket)}}
         if !player.isPlaying{player.play()}
     }
 }

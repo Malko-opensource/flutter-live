@@ -62,8 +62,10 @@ async function onLive(e:LiveEvent){
    break;
   case 'output':if(finishedOutput){session.translation='';finishedOutput=false;}session.translation=(session.translation+(e.text??'')).slice(-6000);session.phase='translating';if(session.clip!=='sing'&&session.clip!=='megaphone')session.clip='speak';break;
   case 'audio':if(session.voice)await safeAudio({op:'play',data:e.data});break;
-  case 'interrupted':await safeAudio({op:'clear'});finishedOutput=true;session.phase='listening';break;
-  case 'complete':finishedInput=true;finishedOutput=true;session.phase='listening';session.clip='listen';break;
+  case 'interrupted':finishedOutput=true;session.phase='listening';await safeAudio({op:'clear'});break;
+  // Input transcription has no ordering guarantee relative to model turn completion.
+  // Keep its bounded rolling text until an explicit input boundary or session reset.
+  case 'complete':finishedOutput=true;session.phase='listening';session.clip='listen';break;
   case 'error':await fail(e.text??'연결 오류');break;
  }void syncOverlay();
 }
@@ -82,7 +84,7 @@ export async function preview(){
  if(!reduced)timer=setInterval(update,80);update();
 }
 export async function setMode(mode:string){if(mode===session.mode)return;const wasLocked=locked();if(wasLocked)await stop();session.mode=mode;session.detected='';if(wasLocked)session.notice='모드가 변경됐습니다. 언어를 확인하고 통역을 다시 시작해 주세요.';session.voice=mode==='conversation';await safeAudio({op:'volume',value:session.voice?session.volume:0});if(!session.voice)await safeAudio({op:'clear'});}
-export async function setVoice(value:boolean){session.voice=value;await safeAudio({op:'volume',value:value?session.volume:0});if(!value)await safeAudio({op:'clear'});}
+export async function setVoice(value:boolean){session.voice=value;await safeAudio({op:'clear'});await safeAudio({op:'volume',value:value?session.volume:0});}
 export async function setVolume(value:number){session.volume=value;await safeAudio({op:'volume',value:session.voice?value:0});}
 export async function showOverlay(hide=false){
  if(hide&&!active()&&session.phase!=='preview'){session.notice='통역을 먼저 시작한 뒤 자막을 띄워 주세요.';return;}

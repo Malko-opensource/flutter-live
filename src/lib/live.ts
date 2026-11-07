@@ -5,6 +5,7 @@ export interface SocketLike {readyState:number;readonly bufferedAmount?:number;o
 // A presentation keeps speaking while its translation is being generated.
 // Only conversation mode should treat new speech as a request to interrupt.
 export function setup(config:LiveConfig,handle?:string){return {setup:{model:`models/${modeModels[config.mode]}`,generationConfig:{responseModalities:['AUDIO'],speechConfig:{voiceConfig:{prebuiltVoiceConfig:{voiceName:'Kore'}}}},systemInstruction:{parts:[{text:interpreterInstruction(config)}]},inputAudioTranscription:{languageCodes:config.mode==='presentation'?[config.firstCode]:[config.firstCode,config.secondCode]},outputAudioTranscription:{},realtimeInputConfig:{automaticActivityDetection:{silenceDurationMs:350,prefixPaddingMs:100},activityHandling:config.mode==='presentation'?'NO_INTERRUPTION':'START_OF_ACTIVITY_INTERRUPTS'},sessionResumption:handle?{handle}:{},contextWindowCompression:{slidingWindow:{}}}}}
+function record(value:unknown):value is Record<string,unknown>{return value!==null&&typeof value==='object'&&!Array.isArray(value);}
 export class LiveClient {
  private socket?:SocketLike;private config?:LiveConfig;private epoch=0;private running=false;private ready=false;private attempt=0;private handle?:string;private resuming=false;private turnActive=false;private rotating=false;private audioStreamOpen=false;private lastAudioAt=0;private blockedSince?:number;private lastBuffered=0;
  private queue:{data:string;at:number}[]=[];private rotation?:ReturnType<typeof setTimeout>;private retry?:ReturnType<typeof setTimeout>;private deadline?:ReturnType<typeof setTimeout>;private stable?:ReturnType<typeof setTimeout>;private pump?:ReturnType<typeof setInterval>;
@@ -42,26 +43,54 @@ export class LiveClient {
   try {const socket=this.factory(`wss://generativelanguage.googleapis.com/ws/google.ai.generativelanguage.v1beta.GenerativeService.BidiGenerateContent?key=${encodeURIComponent(this.config.key)}`);this.socket=socket;
    this.deadline=setTimeout(()=>this.recover(epoch),12000);
    socket.onopen=()=>{if(epoch===this.epoch)this.send(setup(this.config!,this.handle));};
-   socket.onmessage=async e=>{try{const raw=e.data instanceof Blob?await e.data.text():e.data;if(epoch===this.epoch)this.receive(JSON.parse(raw),epoch);}catch{if(epoch===this.epoch)this.fail('서버 응답을 읽지 못했습니다. 다시 시작해 주세요.');}};
+   // WebSocket delivery is ordered, but Blob.text() completion need not be.
+   // Drain strings synchronously unless an earlier Blob is still decoding.
+   const incoming:unknown[]=[];let decoding=false;
+   const parse=(raw:unknown)=>{if(epoch!==this.epoch)return;if(typeof raw!=='string')throw new Error('Expected JSON text');this.receive(JSON.parse(raw),epoch);};
+   const unreadable=()=>{incoming.length=0;if(epoch===this.epoch)this.fail('서버 응답을 읽지 못했습니다. 다시 시작해 주세요.');};
+   const drain=()=>{
+    if(decoding)return;
+    while(incoming.length){
+     if(epoch!==this.epoch){incoming.length=0;return;}
+     const data=incoming.shift();
+     try{
+      if(data instanceof Blob){decoding=true;data.text().then(parse).catch(unreadable).finally(()=>{decoding=false;drain();});return;}
+      parse(data);
+     }catch{unreadable();return;}
+    }
+   };
+   socket.onmessage=e=>{if(epoch!==this.epoch)return;incoming.push(e.data);drain();};
    socket.onerror=()=>this.recover(epoch);
    socket.onclose=e=>{if(epoch!==this.epoch)return;if(!this.ready&&this.resuming){this.handle=undefined;this.recover(epoch,true);}else if([1003,1007,1008].includes(e.code))this.fail('연결이 거부됐습니다. API 키와 해당 키의 사용 권한을 확인해 주세요.');else this.recover(epoch);};
   }catch{this.recover(epoch);}
  }
- private receive(m:any,epoch:number){
-  if(m.error){if(!this.ready&&this.resuming&&[400,404].includes(m.error.code)){this.handle=undefined;this.recover(epoch,true);}else if([429,500,502,503,504].includes(m.error.code))this.recover(epoch,false,m.error.code===429);else this.fail('Gemini 요청이 거부됐습니다. API 키·사용 권한·사용 한도를 확인해 주세요.');return;}
-  if(m.setupComplete!==undefined&&!this.ready){clearTimeout(this.deadline);this.ready=true;this.stable=setTimeout(()=>{if(epoch===this.epoch)this.attempt=0;},30000);this.event({type:'ready'});}
-  if(m.sessionResumptionUpdate){const update=m.sessionResumptionUpdate;if(update.resumable&&update.newHandle)this.handle=update.newHandle;else if(update.resumable===false)this.handle=undefined;}
+ private receive(m:unknown,epoch:number){
+  if(!record(m))return;
+  if(record(m.error)){const code=m.error.code;if(!this.ready&&this.resuming&&(code===400||code===404)){this.handle=undefined;this.recover(epoch,true);}else if(typeof code==='number'&&[429,500,502,503,504].includes(code))this.recover(epoch,false,code===429);else this.fail('Gemini 요청이 거부됐습니다. API 키·사용 권한·사용 한도를 확인해 주세요.');return;}
+  if(record(m.setupComplete)&&!this.ready){clearTimeout(this.deadline);this.ready=true;this.stable=setTimeout(()=>{if(epoch===this.epoch)this.attempt=0;},30000);this.event({type:'ready'});}
+  if(record(m.sessionResumptionUpdate)){const update=m.sessionResumptionUpdate;if(update.resumable===true&&typeof update.newHandle==='string'&&update.newHandle)this.handle=update.newHandle;else if(update.resumable===false)this.handle=undefined;}
   const c=m.serverContent;
-  if(c){
-   if(c.inputTranscription||c.interimInputTranscription||c.modelTurn||c.outputTranscription)this.turnActive=true;
-   if(c.interrupted)this.event({type:'interrupted'});
-   if(c.inputTranscription)this.event({type:'input',text:c.inputTranscription.text??'',finished:!!c.inputTranscription.finished,languageCode:c.inputTranscription.languageCode});
-   else if(c.interimInputTranscription)this.event({type:'interim',text:c.interimInputTranscription.text??'',languageCode:c.interimInputTranscription.languageCode});
-   if(c.outputTranscription)this.event({type:'output',text:c.outputTranscription.text??'',languageCode:c.outputTranscription.languageCode});
-   if(!c.interrupted)for(const p of c.modelTurn?.parts??[]){if(p.inlineData?.mimeType?.startsWith('audio/pcm')){const rate=/rate=(\d+)/.exec(p.inlineData.mimeType)?.[1];if(rate&&rate!=='24000'){this.fail('지원하지 않는 음성 출력 형식입니다. 앱 업데이트를 확인해 주세요.');return;}this.event({type:'audio',data:p.inlineData.data});}}
-   if(c.turnComplete){this.turnActive=false;this.event({type:'complete'});if(this.rotating){this.recover(epoch,true,false,true);return;}}
+  if(record(c)){
+   const input=record(c.inputTranscription)&&typeof c.inputTranscription.text==='string'?c.inputTranscription:undefined;
+   const interim=record(c.interimInputTranscription)&&typeof c.interimInputTranscription.text==='string'?c.interimInputTranscription:undefined;
+   const output=record(c.outputTranscription)&&typeof c.outputTranscription.text==='string'?c.outputTranscription:undefined;
+   const parts=record(c.modelTurn)&&Array.isArray(c.modelTurn.parts)?c.modelTurn.parts:[];
+   if(input||interim||output||parts.length)this.turnActive=true;
+   // Transcription is literal text, not XML/SSML. Keep provider chunks as-is.
+   // Accept legacy finished only when boolean; current Live docs do not promise it.
+   if(input)this.event({type:'input',text:input.text as string,...(typeof input.finished==='boolean'?{finished:input.finished}:{}),languageCode:typeof input.languageCode==='string'?input.languageCode:undefined});
+   else if(interim)this.event({type:'interim',text:interim.text as string,languageCode:typeof interim.languageCode==='string'?interim.languageCode:undefined});
+   if(output)this.event({type:'output',text:output.text as string,languageCode:typeof output.languageCode==='string'?output.languageCode:undefined});
+   // Final transcript chunks in this packet belong to the interrupted turn.
+   if(c.interrupted===true)this.event({type:'interrupted'});
+   else for(const p of parts){
+    const audio=record(p)&&record(p.inlineData)?p.inlineData:undefined;
+    if(audio&&typeof audio.mimeType==='string'&&typeof audio.data==='string'&&audio.mimeType.startsWith('audio/pcm')){const rate=/rate=(\d+)/.exec(audio.mimeType)?.[1];if(rate&&rate!=='24000'){this.fail('지원하지 않는 음성 출력 형식입니다. 앱 업데이트를 확인해 주세요.');return;}this.event({type:'audio',data:audio.data});}
+   }
+   // generationComplete ends generation, not the turn or queued playback.
+   if(c.turnComplete===true){this.turnActive=false;this.event({type:'complete'});if(this.rotating){this.recover(epoch,true,false,true);return;}}
   }
-  if(m.goAway&&!this.rotating){
+  if(record(m.goAway)&&!this.rotating){
    // GoAway is advance notice, not a disconnect. Finish current translation
    // while time remains, then reconnect immediately rather than using backoff.
    if(!this.turnActive){this.recover(epoch,true,false,true);return;}

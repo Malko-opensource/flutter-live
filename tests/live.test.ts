@@ -5,7 +5,7 @@ const config={mode:'conversation' as const,key:'test-secret',first:'Korean',seco
 afterEach(()=>vi.useRealTimers());
 describe('Live stream lifecycle',()=>{
  it('gates audio on setup and bounds reconnect memory',()=>{vi.useFakeTimers();const s=new Socket();const client=new LiveClient(()=>{},()=>s);client.start(config);s.onopen?.(new Event('open'));for(let i=0;i<150;i++)client.audio('pcm');expect(client.bufferedChunks).toBe(100);vi.advanceTimersByTime(20);expect(s.sent.length).toBe(1);s.message({setupComplete:{}});vi.advanceTimersByTime(20);expect(s.sent.length).toBe(5);expect(client.bufferedChunks).toBe(96);client.stop();});
- it('drops audio in interrupted packets and returns both transcripts',()=>{vi.useFakeTimers();const s=new Socket();const events:LiveEvent[]=[];const c=new LiveClient(e=>events.push(e),()=>s);c.start(config);s.message({serverContent:{interrupted:true,inputTranscription:{text:'안녕',finished:true},outputTranscription:{text:'Hello'},modelTurn:{parts:[{inlineData:{mimeType:'audio/pcm',data:'old'}}]}}});expect(events.map(e=>e.type)).toEqual(['connecting','interrupted','input','output']);c.stop();});
+ it('drops audio in interrupted packets and returns both transcripts',()=>{vi.useFakeTimers();const s=new Socket();const events:LiveEvent[]=[];const c=new LiveClient(e=>events.push(e),()=>s);c.start(config);s.message({serverContent:{interrupted:true,inputTranscription:{text:'안녕',finished:true},outputTranscription:{text:'Hello'},modelTurn:{parts:[{inlineData:{mimeType:'audio/pcm',data:'old'}}]}}});expect(events.map(e=>e.type)).toEqual(['connecting','input','output','interrupted']);c.stop();});
  it('uses a resume handle and cancels retry on stop',()=>{vi.useFakeTimers();const sockets:Socket[]=[];const c=new LiveClient(()=>{},()=>{const s=new Socket();sockets.push(s);return s});c.start(config);sockets[0].message({sessionResumptionUpdate:{resumable:true,newHandle:'resume'},goAway:{}});vi.advanceTimersByTime(1400);expect(sockets).toHaveLength(2);sockets[1].onopen?.(new Event('open'));expect(JSON.parse(sockets[1].sent[0]).setup.sessionResumption.handle).toBe('resume');sockets[1].onerror?.(new Event('error'));c.stop();vi.advanceTimersByTime(60000);expect(sockets).toHaveLength(2);});
  it('never exposes provider error details or keys',()=>{vi.useFakeTimers();const s=new Socket();const events:LiveEvent[]=[];const c=new LiveClient(e=>events.push(e),()=>s);c.start(config);s.message({error:{code:403,message:'test-secret'}});expect(events.at(-1)?.type).toBe('error');expect(JSON.stringify(events)).not.toContain('test-secret');c.stop();});
  it('ignores stale responses after stop',()=>{vi.useFakeTimers();const s=new Socket();const events:LiveEvent[]=[];const c=new LiveClient(e=>events.push(e),()=>s);c.start(config);c.stop();s.message({setupComplete:{},serverContent:{outputTranscription:{text:'late'}}});expect(events).toHaveLength(1)});
@@ -180,4 +180,47 @@ it('preserves output through both planned reconnect notifications but not a fail
  sockets[0].message({setupComplete:{},sessionResumptionUpdate:{resumable:true,newHandle:'resume'},serverContent:{outputTranscription:{text:'tail'}}});sockets[0].message({goAway:{timeLeft:'5s'}});sockets[0].message({serverContent:{turnComplete:true}});vi.advanceTimersByTime(0);
  expect(events.filter(e=>e.type==='reconnecting').map(e=>e.preserveOutput)).toEqual([true,true]);
  sockets[1].message({error:{code:400}});vi.advanceTimersByTime(0);expect(events.filter(e=>e.type==='reconnecting').slice(-2).every(e=>!e.preserveOutput)).toBe(true);c.stop();
+});
+
+describe('ordered and literal server responses',()=>{
+ function harness(){vi.useFakeTimers();const s=new Socket();const events:LiveEvent[]=[];const c=new LiveClient(e=>events.push(e),()=>s);c.start(config);return {s,events,c};}
+ async function settle(){for(let i=0;i<12;i++)await Promise.resolve();}
+ it('keeps a slow Blob ahead of later strings and Blobs, including turn completion',async()=>{
+  const {s,events,c}=harness();let first!:(text:string)=>void;let second!:(text:string)=>void;
+  const a=new Blob(),b=new Blob();vi.spyOn(a,'text').mockImplementation(()=>new Promise(r=>first=r));const readB=vi.spyOn(b,'text').mockImplementation(()=>new Promise(r=>second=r));
+  s.onmessage?.({data:a} as MessageEvent);s.message({serverContent:{outputTranscription:{text:' B'}}});s.onmessage?.({data:b} as MessageEvent);s.message({serverContent:{turnComplete:true}});
+  expect(events.map(e=>e.type)).toEqual(['connecting']);expect(readB).not.toHaveBeenCalled();
+  first(JSON.stringify({serverContent:{outputTranscription:{text:'A'}}}));await settle();expect(events.filter(e=>e.type==='output').map(e=>e.text)).toEqual(['A',' B']);
+  second(JSON.stringify({serverContent:{outputTranscription:{text:' C'},generationComplete:true}}));await settle();
+  expect(events.map(e=>e.type)).toEqual(['connecting','output','output','output','complete']);expect(events.filter(e=>e.type==='output').map(e=>e.text).join('')).toBe('A B C');c.stop();
+ });
+ it('does not delay ordinary string messages or equate generationComplete with turnComplete',()=>{
+  const {s,events,c}=harness();s.message({serverContent:{outputTranscription:{text:'tail'},generationComplete:true}});expect(events.at(-1)).toMatchObject({type:'output',text:'tail'});expect(events.some(e=>e.type==='complete')).toBe(false);s.message({serverContent:{turnComplete:true}});expect(events.at(-1)?.type).toBe('complete');c.stop();
+ });
+ it('drops pending Blob and queued string responses after stop',async()=>{
+  const {s,events,c}=harness();let resolve!:(text:string)=>void;const blob=new Blob();vi.spyOn(blob,'text').mockImplementation(()=>new Promise(r=>resolve=r));
+  s.onmessage?.({data:blob} as MessageEvent);s.message({serverContent:{outputTranscription:{text:'queued'}}});c.stop();resolve(JSON.stringify({serverContent:{outputTranscription:{text:'late'}}}));await settle();expect(events.map(e=>e.type)).toEqual(['connecting']);
+ });
+ it('fails once on rejected Blob decoding and never processes queued content',async()=>{
+  const {s,events,c}=harness();let reject!:(error:Error)=>void;const blob=new Blob();vi.spyOn(blob,'text').mockImplementation(()=>new Promise((_,r)=>reject=r));s.onmessage?.({data:blob} as MessageEvent);s.message({serverContent:{outputTranscription:{text:'queued'}}});reject(new Error('bad blob'));await settle();expect(events.map(e=>e.type)).toEqual(['connecting','error']);c.stop();
+ });
+ it('preserves technical text and unknown XML literally across chunk boundaries',()=>{
+  const {s,events,c}=harness();const chunks=['List<','Widget> x<y & &amp; ','<unknown>literal</unknown>'];
+  for(const text of chunks)s.message({serverContent:{inputTranscription:{text},outputTranscription:{text},modelTurn:{parts:[{text:'private thought',thought:true},{text:'not output transcription'}]}}});
+  expect(events.filter(e=>e.type==='output').map(e=>e.text)).toEqual(chunks);expect(events.filter(e=>e.type==='input').map(e=>e.text)).toEqual(chunks);expect(JSON.stringify(events)).not.toContain('private thought');c.stop();
+ });
+ it('preserves the final transcript before interruption and completion, dropping packet audio',()=>{
+  const {s,events,c}=harness();s.message({serverContent:{outputTranscription:{text:'first'}}});s.message({serverContent:{outputTranscription:{text:' tail'},interrupted:true,turnComplete:true,modelTurn:{parts:[{inlineData:{mimeType:'audio/pcm',data:'discard'}}]}}});
+  expect(events.map(e=>e.type)).toEqual(['connecting','output','output','interrupted','complete']);expect(events.filter(e=>e.type==='output').map(e=>e.text).join('')).toBe('first tail');c.stop();
+ });
+ it('ignores malformed JSON fields without coercion or false turn boundaries',()=>{
+  const {s,events,c}=harness();
+  for(const value of [null,[],42,{setupComplete:false},{serverContent:{inputTranscription:{text:{}},outputTranscription:{text:[]},modelTurn:{parts:{}},interrupted:'false',turnComplete:'false'}},{serverContent:{modelTurn:{parts:[null,{}, {inlineData:{mimeType:42,data:'x'}},{inlineData:{mimeType:'audio/pcm',data:{}}}]}}}])s.message(value);
+  expect(events.map(e=>e.type)).toEqual(['connecting']);
+  s.message({serverContent:{inputTranscription:{text:'valid',languageCode:{},finished:'false'},outputTranscription:{text:'text',languageCode:3}}});
+  expect(events.at(-2)).toEqual({type:'input',text:'valid',languageCode:undefined});expect(events.at(-1)).toEqual({type:'output',text:'text',languageCode:undefined});c.stop();
+ });
+ it('only accepts explicit boolean finished as optional legacy metadata',()=>{
+  const {s,events,c}=harness();for(const finished of [undefined,false,true,'true'])s.message({serverContent:{inputTranscription:{text:'chunk',finished}}});expect(events.filter(e=>e.type==='input').map(e=>e.finished)).toEqual([undefined,false,true,undefined]);c.stop();
+ });
 });
