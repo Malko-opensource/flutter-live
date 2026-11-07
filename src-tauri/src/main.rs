@@ -13,6 +13,10 @@ extern "C" {
     fn fl_audio_init(callback: extern "C" fn(*const c_char));
     fn fl_audio_command(json: *const c_char);
     fn fl_overlay_show(window: *mut c_void);
+    fn fl_overlay_hide();
+    fn fl_overlay_resize(height: f64);
+    fn fl_overlay_drag();
+    fn fl_overlay_destroy();
 }
 extern "C" fn audio_event(raw: *const c_char) {
     if raw.is_null() {
@@ -46,10 +50,9 @@ fn show_overlay_window(window: &tauri::WebviewWindow) -> Result<(), String> {
 #[tauri::command]
 fn show_overlay(app: tauri::AppHandle, visible: bool) -> Result<(), String> {
     if !visible {
-        if let Some(w) = app.get_webview_window("overlay") {
-            w.hide().map_err(|e| e.to_string())?;
-        }
-        return Ok(());
+        return app
+            .run_on_main_thread(|| unsafe { fl_overlay_hide() })
+            .map_err(|e| e.to_string());
     }
     if let Some(w) = app.get_webview_window("overlay") {
         show_overlay_window(&w)?;
@@ -62,6 +65,8 @@ fn show_overlay(app: tauri::AppHandle, visible: bool) -> Result<(), String> {
         .title("Flutter Live 자막")
         .visible(false)
         .focused(false)
+        .accept_first_mouse(true)
+        .background_throttling(tauri::utils::config::BackgroundThrottlingPolicy::Disabled)
         .inner_size(900.0, 160.0)
         .min_inner_size(540.0, 160.0)
         .decorations(false)
@@ -71,14 +76,6 @@ fn show_overlay(app: tauri::AppHandle, visible: bool) -> Result<(), String> {
         .visible_on_all_workspaces(true)
         .build()
         .map_err(|e| e.to_string())?;
-        if let Ok(Some(m)) = w.current_monitor() {
-            let s = m.size();
-            let scale = m.scale_factor();
-            let _ = w.set_position(tauri::LogicalPosition::new(
-                (s.width as f64 / scale - 900.0) / 2.0,
-                s.height as f64 / scale - 210.0,
-            ));
-        }
         show_overlay_window(&w)?;
     }
     Ok(())
@@ -88,28 +85,23 @@ fn resize_overlay(app: tauri::AppHandle, height: f64) -> Result<(), String> {
     if !height.is_finite() {
         return Err("잘못된 자막 크기".into());
     }
-    if let Some(w) = app.get_webview_window("overlay") {
-        let scale = w.scale_factor().map_err(|e| e.to_string())?;
-        let size = w.inner_size().map_err(|e| e.to_string())?;
-        let position = w.outer_position().map_err(|e| e.to_string())?;
-        let height = height.clamp(160.0, 340.0);
-        w.set_size(tauri::LogicalSize::new(size.width as f64 / scale, height))
-            .map_err(|e| e.to_string())?;
-        w.set_position(tauri::LogicalPosition::new(
-            position.x as f64 / scale,
-            (position.y as f64 / scale + size.height as f64 / scale - height).max(0.0),
-        ))
-        .map_err(|e| e.to_string())?;
-    }
-    Ok(())
+    app.run_on_main_thread(move || unsafe { fl_overlay_resize(height) })
+        .map_err(|e| e.to_string())
 }
+#[tauri::command]
+fn drag_overlay(app: tauri::AppHandle) -> Result<(), String> {
+    app.run_on_main_thread(|| unsafe { fl_overlay_drag() })
+        .map_err(|e| e.to_string())
+}
+
 fn main() {
     tauri::Builder::default()
         .invoke_handler(tauri::generate_handler![
             audio_command,
             show_main,
             show_overlay,
-            resize_overlay
+            resize_overlay,
+            drag_overlay
         ])
         .setup(|app| {
             let _ = APP.set(app.handle().clone());
@@ -134,6 +126,17 @@ fn main() {
             Ok(())
         })
         .on_window_event(|window, event| {
+            if window.label() == "overlay" {
+                match event {
+                    tauri::WindowEvent::CloseRequested { api, .. } => {
+                        api.prevent_close();
+                        unsafe { fl_overlay_hide() };
+                    }
+                    tauri::WindowEvent::Destroyed => unsafe { fl_overlay_destroy() },
+                    _ => {}
+                }
+                return;
+            }
             if let tauri::WindowEvent::CloseRequested { api, .. } = event {
                 api.prevent_close();
                 let _ = window.hide();

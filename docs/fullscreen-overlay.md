@@ -1,38 +1,39 @@
 # macOS fullscreen caption overlay
 
-The caption window uses public AppKit collection behaviors available on the app's macOS 13 minimum target:
+## v0.2.3 fix
 
-- `canJoinAllSpaces` and `canJoinAllApplications` let a floating window join other applications' fullscreen Spaces.
-- `fullScreenAuxiliary` allows the caption to accompany fullscreen content. Conflicting primary/none/tiling flags are removed.
-- The window remains at floating level and does not hide when the app deactivates.
-- It is created hidden and unfocused, then configured and ordered on the AppKit main thread with `orderFrontRegardless`. Showing captions does not intentionally activate the app or make the caption the key window.
+v0.2.2 only changed collection behaviors on Tauri's ordinary NSWindow. A user confirmed that this did not keep captions above Chrome fullscreen. The previous per-window screenshots were not proof of composited visibility.
 
-The implementation preserves Tauri's native window class and the application's normal activation policy. No NSPanel class replacement, private AppKit API, accessibility permission, or system security change is required. Main-window activation remains intentional when the user presses “메인 창 열기”.
+The caption now lives in a real AppKit `NSPanel`, created with `nonactivatingPanel` from the start. Its floating level, `canJoinAllSpaces`, `canJoinAllApplications` and `fullScreenAuxiliary` behaviors allow it to accompany other apps' fullscreen Spaces. It does not become the key or main window, hide on deactivation, or intentionally activate Flutter Live. The app's normal activation policy remains unchanged.
 
-## Native regression test
+The existing Tauri content view moves into the panel, retaining the same webview and event label. The original hidden host keeps a placeholder view because Tao's window callbacks require one. No Objective-C runtime class replacement is used. Hide, resize and drag commands operate on the panel, and closing it hides rather than destroys it. First mouse events are accepted while Chrome is active. The caption starts near the screen's lower edge; edge resizing and content sizing are preserved.
 
-From the repository root on a Mac with Xcode installed:
+No separate overlay permission, accessibility grant, or OS security setting change is required by this implementation. Microphone/system-audio permissions remain separate audio features. The main window's explicit “메인 창 열기” action still intentionally activates Flutter Live.
+
+Apple references:
+- [Nonactivating panel](https://developer.apple.com/documentation/appkit/nswindow/stylemask-swift.struct/nonactivatingpanel)
+- [Joining other applications](https://developer.apple.com/documentation/appkit/nswindow/collectionbehavior-swift.struct/canjoinallapplications)
+- [How panels work](https://developer.apple.com/library/archive/documentation/Cocoa/Conceptual/WinPanel/Concepts/UsingPanels.html)
+
+## Regression tests
 
 ```sh
+npm test
+npm run check
 xcrun swiftc -swift-version 5 -target "$(uname -m)-apple-macosx13.0" \
   src-tauri/native/OverlayWindow.swift \
   src-tauri/native/tests/OverlayWindowTests.swift \
   -o /tmp/flutter-overlay-window-tests
 /tmp/flutter-overlay-window-tests
+npm run tauri -- build
 ```
 
-This exercises real AppKit window configuration, conflicting flag removal, floating level, inactive visibility, repeat configuration, and a null C-bridge argument. It does not open the test window or capture audio. Run the normal frontend checks and `npm run tauri -- build --debug` separately.
+The native test checks actual NSPanel type/style, non-key behavior, collection flags, content ownership, non-nil host placeholder, resizing, initial placement, detach restoration and null lifecycle calls. It does not replace visual WKWebView or fullscreen testing.
 
-## Manual fullscreen check
+## Visual verification
 
-1. Open the built app, select subtitle overlay mode, and start **디자인 미리보기**. No credentials or audio are required.
-2. Show the caption and hide the main window.
-3. In a separate Chrome window showing `about:blank`, enter macOS native fullscreen with Control-Command-F.
-4. Confirm the caption remains visibly above Chrome, Chrome retains keyboard focus, and no desktop switch occurs.
-5. Exit/re-enter fullscreen, hide/reopen the caption, and verify main-window return and quit.
-6. Close only the temporary Chrome window and stop the preview.
+On macOS 26.3.1 arm64, the Debug implementation displayed preview captions above Google Slides' actual slideshow fullscreen in Chrome. This was verified with a macOS whole-screen capture opened in Preview, rather than separate captures of Chrome and Flutter Live. Google's [public sample presentation](https://docs.google.com/presentation/d/1EAYk18WDjIG-zp_0vLm3CsfQh_i8eXc67Jo2O9C6Vuc/edit), linked from its [Slides API quickstart](https://developers.google.com/workspace/slides/api/quickstart/javascript), was used without editing or publishing any slides.
 
-On macOS 26.3.1 arm64, the debug bundle and native test passed. CUA exercised preview, show/hide/reopen, main-window return, Chrome native fullscreen entry/exit, and app quit. Its screenshots captured Chrome and the caption separately; this does **not** conclusively establish their composited z-order or focus retention. Those two checks remain a visual validation item. Chrome's original remote-desktop tab was left intact and the QA window was closed. No live translation/audio test was performed. Older supported macOS versions and multiple-display Spaces are not yet tested.
+Final v0.2.3 Release verification is recorded in the release notes. Live Gemini translation/audio, older macOS versions, multiple displays/Spaces and prolonged presentation sessions remain outside this fullscreen check. macOS 13 cannot disable hidden webview background throttling; keep the main window visible there.
 
-
-The final v0.2.2 Release bundle was also launched after ad-hoc signing. Offline preview, caption show/main hide, main return, caption hide/reopen, preview stop, and app quit passed. No credentials or audio were used. Chrome fullscreen was not repeated for that final bundle; the cross-app compositing and keyboard-focus limitations above still apply.
+To repeat without credentials or audio: select subtitle mode, start **디자인 미리보기**, show the caption and hide the main window, then start Google Slides' slideshow in Chrome. Check caption visibility, slide navigation, caption close/reopen, main-window return and app quit. Showing the main window intentionally returns focus to Flutter Live.

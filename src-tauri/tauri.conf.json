@@ -1,5 +1,5 @@
 {
- "$schema":"https://schema.tauri.app/config/2", "productName":"Flutter Live", "version":"0.2.2", "identifier":"dev.fluttermeetup.live",
+ "$schema":"https://schema.tauri.app/config/2", "productName":"Flutter Live", "version":"0.2.3", "identifier":"dev.fluttermeetup.live",
  "build":{"beforeDevCommand":"npm run dev","devUrl":"http://localhost:1420","beforeBuildCommand":"npm run build","frontendDist":"../dist"},
  "app":{"macOSPrivateApi":true,"windows":[{"label":"main","backgroundThrottling":"disabled","title":"Flutter Live","width":900,"height":760,"minWidth":680,"minHeight":600,"titleBarStyle":"Overlay","hiddenTitle":true}],"security":{"csp":"default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' asset: http://asset.localhost data:; font-src 'self' data:; connect-src ipc: http://ipc.localhost ws://localhost:1420 wss://generativelanguage.googleapis.com"}},
  "bundle":{"active":true,"targets":["app"],"icon":["icons/icon.png"],"macOS":{"minimumSystemVersion":"13.0","entitlements":"Entitlements.plist","infoPlist":"Info.plist"}}
