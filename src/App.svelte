@@ -42,7 +42,7 @@
    {:else}
     <section class="overlay-workspace"><div class="section-heading"><h1>발표는 그대로, 자막은 내 언어로.</h1><p>원문과 번역 언어를 지정하고 자막을 띄우세요.</p></div>
      <div class="presentation-preview" aria-label="오버레이 미리보기"><div class="preview-slide"><span>Flutter Meetup</span><p>Build beautiful apps.</p><div class="slide-lines"><i></i><i></i><i></i></div></div><div class="preview-caption" data-caption-theme={resolvedCaptionTheme()}><Dash size={96} skin={settings.skin} clip={session.clip} animate={active()||session.phase==='preview'}/><div><span>{session.phase==='preview'?'디자인 미리보기':`${session.first.toUpperCase()} → ${session.second.toUpperCase()}`}</span><strong>{session.translation||'번역 자막이 여기에 표시됩니다.'}</strong><p>{session.original||'현재 발화만 표시합니다.'}</p></div></div></div>
-     <div class="overlay-actions"><Button variant="secondary" onclick={()=>showOverlay(true)}>자막 띄우고 창 숨기기<ArrowUpRight size={16}/></Button>{#if session.overlay}<Button variant="text" onclick={hideOverlay}>자막 숨기기</Button>{/if}<Button variant="text" onclick={preview}>디자인 미리보기</Button></div><p class="help">메뉴바에서 Flutter Live 창을 다시 열 수 있습니다.</p><div class="status" role="status"><span class:live={active()}></span>{status()}</div>
+     <div class="overlay-actions"><Button variant="secondary" disabled={!active()&&session.phase!=='preview'} onclick={()=>showOverlay(true)}>자막 띄우고 창 숨기기<ArrowUpRight size={16}/></Button>{#if session.overlay}<Button variant="text" onclick={hideOverlay}>자막 숨기기</Button>{/if}<Button variant="text" onclick={preview}>디자인 미리보기</Button></div><p class="help">먼저 아래의 통역 시작을 누른 뒤 자막을 띄우세요. 메뉴바에서 메인 창을 다시 열 수 있습니다.</p><div class="status" role="status"><span class:live={active()}></span>{status()}</div>
     </section>
    {/if}
    </main>

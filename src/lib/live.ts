@@ -2,13 +2,18 @@ import {interpreterInstruction,modeModels,type LanguagePair} from './interpreter
 export type LiveConfig=LanguagePair & {key:string};
 export type LiveEvent={type:'ready'|'connecting'|'reconnecting'|'input'|'interim'|'output'|'audio'|'interrupted'|'complete'|'error';text?:string;data?:string;finished?:boolean;languageCode?:string};
 export interface SocketLike {readyState:number;readonly bufferedAmount?:number;onopen:((e:Event)=>void)|null;onmessage:((e:MessageEvent)=>void)|null;onerror:((e:Event)=>void)|null;onclose:((e:CloseEvent)=>void)|null;send:(data:string)=>void;close:()=>void}
-export function setup(config:LiveConfig,handle?:string){return {setup:{model:`models/${modeModels[config.mode]}`,generationConfig:{responseModalities:['AUDIO'],speechConfig:{voiceConfig:{prebuiltVoiceConfig:{voiceName:'Kore'}}}},systemInstruction:{parts:[{text:interpreterInstruction(config)}]},inputAudioTranscription:{languageCodes:config.mode==='presentation'?[config.firstCode]:[config.firstCode,config.secondCode]},outputAudioTranscription:{},realtimeInputConfig:{automaticActivityDetection:{silenceDurationMs:350,prefixPaddingMs:100},activityHandling:'START_OF_ACTIVITY_INTERRUPTS'},sessionResumption:handle?{handle}:{},contextWindowCompression:{slidingWindow:{}}}}}
+// A presentation keeps speaking while its translation is being generated.
+// Only conversation mode should treat new speech as a request to interrupt.
+export function setup(config:LiveConfig,handle?:string){return {setup:{model:`models/${modeModels[config.mode]}`,generationConfig:{responseModalities:['AUDIO'],speechConfig:{voiceConfig:{prebuiltVoiceConfig:{voiceName:'Kore'}}}},systemInstruction:{parts:[{text:interpreterInstruction(config)}]},inputAudioTranscription:{languageCodes:config.mode==='presentation'?[config.firstCode]:[config.firstCode,config.secondCode]},outputAudioTranscription:{},realtimeInputConfig:{automaticActivityDetection:{silenceDurationMs:350,prefixPaddingMs:100},activityHandling:config.mode==='presentation'?'NO_INTERRUPTION':'START_OF_ACTIVITY_INTERRUPTS'},sessionResumption:handle?{handle}:{},contextWindowCompression:{slidingWindow:{}}}}}
 export class LiveClient {
  private socket?:SocketLike;private config?:LiveConfig;private epoch=0;private running=false;private ready=false;private attempt=0;private handle?:string;
  private queue:string[]=[];private retry?:ReturnType<typeof setTimeout>;private deadline?:ReturnType<typeof setTimeout>;private stable?:ReturnType<typeof setTimeout>;private pump?:ReturnType<typeof setInterval>;
  constructor(private event:(event:LiveEvent)=>void,private factory:(url:string)=>SocketLike=url=>new WebSocket(url)){}
- start(config:LiveConfig){this.stop();this.running=true;this.config=config;this.pump=setInterval(()=>{for(let i=0;i<4&&this.ready&&this.queue.length&&(this.socket?.bufferedAmount??0)<65536;i++)this.send({realtimeInput:{audio:{data:this.queue.shift(),mimeType:'audio/pcm;rate=16000'}}});},20);this.connect();}
- audio(data:string){if(this.running){this.queue.push(data);if(this.queue.length>100)this.queue.shift();}}
+ start(config:LiveConfig){this.stop();this.running=true;this.config=config;this.pump=setInterval(()=>this.flushAudio(),20);this.connect();}
+ audio(data:string){if(this.running){this.queue.push(data);if(this.queue.length>100)this.queue.shift();this.flushAudio();}}
+ // Capture events keep the stream moving when a hidden webview delays timers.
+ // The timer remains a bounded retry for queued audio after socket congestion.
+ private flushAudio(){for(let i=0;i<4&&this.ready&&this.socket?.readyState===1&&this.queue.length&&(this.socket.bufferedAmount??0)<65536;i++)this.send({realtimeInput:{audio:{data:this.queue.shift(),mimeType:'audio/pcm;rate=16000'}}});}
  get bufferedChunks(){return this.queue.length;}
  private connect(){
   if(!this.running||!this.config)return;const epoch=++this.epoch;this.ready=false;

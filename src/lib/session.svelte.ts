@@ -29,7 +29,7 @@ export async function init(){if(initialized||!isTauri())return;initialized=true;
   if(!session.testing){client.audio(m.data);if(v.db>settings.threshold)loudMs+=20;else loudMs=0;if(v.db>-38){session.clip=loudMs>=100?'megaphone':'sing';clearTimeout(quiet);quiet=setTimeout(()=>session.clip='listen',450);}}
  }
  });await listen('stop',()=>void stop());await listen('overlay-ready',()=>void syncOverlay());await listen('overlay-hidden',()=>session.overlay=false);await refreshDevices();}
-export function snapshot(){return {appearance:{...appearance},original:session.original,translation:session.translation,label:`${languages.find(l=>l.code===session.first)?.label} ${session.mode==='overlay'?'→':'↔'} ${languages.find(l=>l.code===session.second)?.label} · ${languageStatus()}`,skin:settings.skin,clip:session.clip,animate:active()||session.phase==='preview',preview:session.phase==='preview'};}
+export function snapshot(){return {phase:session.phase,status:status(),appearance:{...appearance},original:session.original,translation:session.translation,label:`${languages.find(l=>l.code===session.first)?.label} ${session.mode==='overlay'?'→':'↔'} ${languages.find(l=>l.code===session.second)?.label} · ${languageStatus()}`,skin:settings.skin,clip:session.clip,animate:active()||session.phase==='preview',preview:session.phase==='preview'};}
 export async function syncOverlay(){if(isTauri())await emitTo('overlay','caption',snapshot());}
 async function onLive(e:LiveEvent){
  switch(e.type){
@@ -66,5 +66,11 @@ export async function preview(){
 export async function setMode(mode:string){if(mode===session.mode)return;const wasLocked=locked();if(wasLocked)await stop();session.mode=mode;session.detected='';if(wasLocked)session.notice='모드가 변경됐습니다. 언어를 확인하고 통역을 다시 시작해 주세요.';session.voice=mode==='conversation';await safeAudio({op:'volume',value:session.voice?session.volume:0});if(!session.voice)await safeAudio({op:'clear'});}
 export async function setVoice(value:boolean){session.voice=value;await safeAudio({op:'volume',value:value?session.volume:0});if(!value)await safeAudio({op:'clear'});}
 export async function setVolume(value:number){session.volume=value;await safeAudio({op:'volume',value:session.voice?value:0});}
-export async function showOverlay(hide=false){if(!isTauri()){session.error='자막 오버레이는 macOS 앱에서 사용할 수 있습니다.';return;}await invoke('show_overlay',{visible:true});session.overlay=true;await syncOverlay();if(hide)await getCurrentWindow().hide();}
+export async function showOverlay(hide=false){
+ if(hide&&!active()&&session.phase!=='preview'){session.notice='통역을 먼저 시작한 뒤 자막을 띄워 주세요.';return;}
+ if(!isTauri()){session.error='자막 오버레이는 macOS 앱에서 사용할 수 있습니다.';return;}
+ await invoke('show_overlay',{visible:true});session.overlay=true;await syncOverlay();
+ // Opening the native window is asynchronous: stop/error may arrive meanwhile.
+ if(hide&&(active()||session.phase==='preview'))await getCurrentWindow().hide();
+}
 export async function hideOverlay(){if(isTauri())await invoke('show_overlay',{visible:false});session.overlay=false;}

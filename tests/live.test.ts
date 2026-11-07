@@ -46,3 +46,37 @@ it('pins the model for each mode even when stale callers include a model overrid
   expect(setup(stale,'resume').setup.model).toBe('models/gemini-3.8-live');
  }
 });
+
+
+it('does not interrupt presentation translation when the speaker resumes',()=>{
+ expect(setup({...config,mode:'presentation'}).setup.realtimeInputConfig.activityHandling).toBe('NO_INTERRUPTION');
+ expect(setup(config).setup.realtimeInputConfig.activityHandling).toBe('START_OF_ACTIVITY_INTERRUPTS');
+});
+it('forwards live microphone chunks without waiting for background webview timers',()=>{
+ vi.useFakeTimers();const s=new Socket();const c=new LiveClient(()=>{},()=>s);c.start({...config,mode:'presentation'});
+ s.message({setupComplete:{}});c.audio('first');c.audio('second');
+ expect(s.sent.map(raw=>JSON.parse(raw).realtimeInput.audio.data)).toEqual(['first','second']);
+ expect(c.bufferedChunks).toBe(0);c.stop();
+});
+it('drains queued audio in order on capture events when background timers are delayed',()=>{
+ vi.useFakeTimers();const s=new Socket();const c=new LiveClient(()=>{},()=>s);c.start(config);
+ for(let i=0;i<6;i++)c.audio(String(i));s.message({setupComplete:{}});c.audio('new');
+ expect(s.sent.map(raw=>JSON.parse(raw).realtimeInput.audio.data)).toEqual(['0','1','2','3']);
+ expect(c.bufferedChunks).toBe(3);c.stop();
+});
+
+it('resumes capture-driven sends after backpressure clears without a timer tick',()=>{
+ vi.useFakeTimers();const s=new Socket();const c=new LiveClient(()=>{},()=>s);c.start(config);s.message({setupComplete:{}});
+ s.bufferedAmount=65536;c.audio('queued');expect(s.sent).toHaveLength(0);
+ s.bufferedAmount=0;c.audio('next');expect(s.sent.map(raw=>JSON.parse(raw).realtimeInput.audio.data)).toEqual(['queued','next']);c.stop();
+});
+it('stops a capture-driven flush immediately when send fails',()=>{
+ vi.useFakeTimers();const s=new Socket();const events:LiveEvent[]=[];const c=new LiveClient(e=>events.push(e),()=>s);c.start(config);
+ c.audio('queued');s.message({setupComplete:{}});const send=vi.spyOn(s,'send').mockImplementation(()=>{throw new Error('offline')});
+ c.audio('next');expect(send).toHaveBeenCalledOnce();expect(events.at(-1)?.type).toBe('reconnecting');
+ c.audio('later');expect(send).toHaveBeenCalledOnce();c.stop();
+});
+it('does not drain audio into a closed socket',()=>{
+ vi.useFakeTimers();const s=new Socket();const c=new LiveClient(()=>{},()=>s);c.start(config);s.message({setupComplete:{}});s.close();c.audio('queued');
+ expect(s.sent).toHaveLength(0);expect(c.bufferedChunks).toBe(1);c.stop();
+});

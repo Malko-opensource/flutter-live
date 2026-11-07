@@ -27,6 +27,7 @@ fn main() {
                 "-sdk",
                 sdk.trim(),
                 "native/AudioHost.swift",
+                "native/OverlayWindow.swift",
                 "-o",
             ])
             .arg(out.join("libLiveAudio.a"))
@@ -38,6 +39,7 @@ fn main() {
         println!("cargo:rustc-link-search=native=/usr/lib/swift");
         for f in [
             "Foundation",
+            "AppKit",
             "AVFoundation",
             "AVFAudio",
             "CoreAudio",
@@ -50,6 +52,7 @@ fn main() {
         println!("cargo:rustc-link-lib=dylib=swiftCore");
         println!("cargo:rustc-link-arg=-Wl,-rpath,/usr/lib/swift");
         println!("cargo:rerun-if-changed=native/AudioHost.swift");
+        println!("cargo:rerun-if-changed=native/OverlayWindow.swift");
     }
     tauri_build::build();
 }

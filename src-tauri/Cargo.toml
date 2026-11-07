@@ -1,6 +1,6 @@
 [package]
 name = "flutter-live"
-version = "0.2.1"
+version = "0.2.2"
 description = "Live interpretation for macOS"
 authors = ["Malko-opensource"]
 edition = "2021"

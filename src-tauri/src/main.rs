@@ -1,6 +1,6 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 use std::{
-    ffi::{c_char, CStr, CString},
+    ffi::{c_char, c_void, CStr, CString},
     sync::OnceLock,
 };
 use tauri::{
@@ -12,6 +12,7 @@ static APP: OnceLock<tauri::AppHandle> = OnceLock::new();
 extern "C" {
     fn fl_audio_init(callback: extern "C" fn(*const c_char));
     fn fl_audio_command(json: *const c_char);
+    fn fl_overlay_show(window: *mut c_void);
 }
 extern "C" fn audio_event(raw: *const c_char) {
     if raw.is_null() {
@@ -35,6 +36,13 @@ fn show_main(app: tauri::AppHandle) {
         let _ = w.set_focus();
     }
 }
+// Order the overlay without activating the app or leaving a fullscreen Space.
+fn show_overlay_window(window: &tauri::WebviewWindow) -> Result<(), String> {
+    let raw = window.ns_window().map_err(|e| e.to_string())? as usize;
+    window
+        .run_on_main_thread(move || unsafe { fl_overlay_show(raw as *mut c_void) })
+        .map_err(|e| e.to_string())
+}
 #[tauri::command]
 fn show_overlay(app: tauri::AppHandle, visible: bool) -> Result<(), String> {
     if !visible {
@@ -44,7 +52,7 @@ fn show_overlay(app: tauri::AppHandle, visible: bool) -> Result<(), String> {
         return Ok(());
     }
     if let Some(w) = app.get_webview_window("overlay") {
-        w.show().map_err(|e| e.to_string())?;
+        show_overlay_window(&w)?;
     } else {
         let w = WebviewWindowBuilder::new(
             &app,
@@ -52,6 +60,8 @@ fn show_overlay(app: tauri::AppHandle, visible: bool) -> Result<(), String> {
             WebviewUrl::App("index.html?overlay=1".into()),
         )
         .title("Flutter Live 자막")
+        .visible(false)
+        .focused(false)
         .inner_size(900.0, 160.0)
         .min_inner_size(540.0, 160.0)
         .decorations(false)
@@ -69,6 +79,7 @@ fn show_overlay(app: tauri::AppHandle, visible: bool) -> Result<(), String> {
                 s.height as f64 / scale - 210.0,
             ));
         }
+        show_overlay_window(&w)?;
     }
     Ok(())
 }
