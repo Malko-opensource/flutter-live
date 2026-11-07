@@ -15,6 +15,6 @@ currently build the app without access to this dependency.
 ## November 2026 binary release authorization
 
 On 2026-11-07, the package rights holder approved the maintainer's public
-distribution of the v0.2.2 app bundle and its v0.2.3 fullscreen hotfix containing this dependency. This approval
+distribution of the v0.2.2 app bundle and the v0.2.3 and v0.2.4 follow-up releases containing this dependency. This approval
 does not change the package's `UNLICENSED` declaration or grant a separate
 license to redistribute the standalone design package.
