@@ -1,16 +1,17 @@
 import {afterEach,describe,expect,it,vi} from 'vitest';
 import {invoke} from '@tauri-apps/api/core';
+import {emitTo} from '@tauri-apps/api/event';
 import type {LiveConfig,LiveEvent} from '../src/lib/live';
-const wire=vi.hoisted(()=>({config:undefined as LiveConfig|undefined,receive:(_event:LiveEvent)=>{},stop:vi.fn(),audio:vi.fn(),hide:vi.fn(async()=>{})}));
+const wire=vi.hoisted(()=>({config:undefined as LiveConfig|undefined,receive:(_event:LiveEvent)=>{},capture:(_event:{payload:Record<string,unknown>})=>{},stop:vi.fn(),audio:vi.fn(),hide:vi.fn(async()=>{})}));
 vi.mock('../src/lib/live',()=>({
- LiveClient:class {constructor(receive:(event:LiveEvent)=>void){wire.receive=receive} start(config:LiveConfig){wire.config=config} stop(){wire.stop()} audio(){}},
+ LiveClient:class {constructor(receive:(event:LiveEvent)=>void){wire.receive=receive} start(config:LiveConfig){wire.config=config} stop(){wire.stop()} audio(data:string){wire.audio(data)}},
  measurePCM:()=>({db:-96,level:0})
 }));
 vi.mock('@tauri-apps/api/core',()=>({isTauri:()=>true,invoke:vi.fn(async()=>{})}));
-vi.mock('@tauri-apps/api/event',()=>({emitTo:vi.fn(async()=>{}),listen:vi.fn(async()=>()=>{})}));
+vi.mock('@tauri-apps/api/event',()=>({emitTo:vi.fn(async()=>{}),listen:vi.fn(async(name:string,handler:typeof wire.capture)=>{if(name==='audio')wire.capture=handler;return ()=>{}})}));
 vi.mock('@tauri-apps/api/window',()=>({getCurrentWindow:()=>({hide:wire.hide})}));
-import {session,settings,start,stop,setMode,snapshot,languageStatus,chooseLanguage,languages,showOverlay,preview} from '../src/lib/session.svelte';
-afterEach(async()=>{await stop();session.overlay=false;session.voice=true;session.mode='conversation';session.first='ko';session.second='en';settings.key='';wire.config=undefined;vi.clearAllMocks()});
+import {session,settings,init,start,stop,setMode,snapshot,languageStatus,chooseLanguage,languages,showOverlay,preview} from '../src/lib/session.svelte';
+afterEach(async()=>{await stop();session.overlay=false;session.voice=true;session.mode='conversation';session.first='ko';session.second='en';settings.key='';wire.config=undefined;vi.useRealTimers();vi.clearAllMocks()});
 describe('mode-specific session contract',()=>{
  it('starts the presentation with the selected source and target',async()=>{
   await setMode('overlay');session.first='en';session.second='ko';settings.key='fixture';await start();
@@ -79,4 +80,81 @@ it('does not hide the main window if the session stops while the overlay opens',
  await setMode('overlay');settings.key='fixture';await start();await wire.receive({type:'connecting'});
  vi.mocked(invoke).mockImplementationOnce(async()=>{await stop()});await showOverlay(true);
  expect(wire.hide).not.toHaveBeenCalled();expect(session.phase).toBe('idle');
+});
+
+describe('continuous capture across silence and transport recovery',()=>{
+ it.each(['stop','mode change','new session'])('cancels pending capture setup after %s',async(action)=>{
+  settings.key='fixture';await start();vi.mocked(invoke).mockClear();
+  let release!:()=>void;vi.mocked(invoke).mockImplementationOnce(()=>new Promise<void>(resolve=>{release=resolve}));
+  const pending=wire.receive({type:'ready'});
+  if(action==='mode change')await setMode('overlay');
+  else await stop();
+  if(action==='new session'){await start();await wire.receive({type:'ready'});}
+  vi.mocked(invoke).mockClear();release();await pending;
+  expect(vi.mocked(invoke).mock.calls.filter(([,args])=>(args as any)?.command?.op==='start')).toHaveLength(0);
+  expect(session.phase).toBe(action==='new session'?'listening':'idle');
+ });
+ it('ignores a late capture-start rejection after user stop',async()=>{
+  settings.key='fixture';await start();vi.mocked(invoke).mockClear();
+  let rejectStart!:(reason:Error)=>void;
+  vi.mocked(invoke).mockImplementationOnce(async()=>{}).mockImplementationOnce(()=>new Promise<void>((_,reject)=>{rejectStart=reject}));
+  const pending=wire.receive({type:'ready'});
+  await vi.waitFor(()=>expect(invoke).toHaveBeenCalledWith('audio_command',{command:{op:'start',source:settings.source,uid:settings.uid}}));
+  await stop();rejectStart(new Error('Late capture failure'));await pending;
+  expect(session.phase).toBe('idle');expect(session.error).toBe('');
+ });
+ it('publishes the native capture error to the overlay and stops forwarding audio',async()=>{
+  await init();settings.key='fixture';await start();await wire.receive({type:'ready'});
+  vi.mocked(emitTo).mockClear();wire.audio.mockClear();
+  wire.capture({payload:{type:'error',message:'시스템 오디오 캡처가 중단됐습니다.'}});
+  await vi.waitFor(()=>expect(emitTo).toHaveBeenCalledWith('overlay','caption',expect.objectContaining({phase:'error',status:'시스템 오디오 캡처가 중단됐습니다.'})));
+  wire.capture({payload:{type:'pcm',data:'late-error-pcm'}});
+  expect(wire.audio).not.toHaveBeenCalled();expect(session.phase).toBe('error');
+ });
+ it('keeps listening after a completed turn and prolonged silence, then accepts new speech',async()=>{
+  await init();settings.key='fixture';await start();await wire.receive({type:'ready'});
+  await wire.receive({type:'input',text:'Hello',finished:true});await wire.receive({type:'output',text:'안녕하세요'});
+  await wire.receive({type:'complete'});vi.mocked(invoke).mockClear();wire.stop.mockClear();
+  vi.useFakeTimers();await vi.advanceTimersByTimeAsync(5*60*1000);
+  wire.capture({payload:{type:'pcm',data:'silent-pcm'}});
+  expect(session.phase).toBe('listening');expect(session.db).toBe(-96);
+  expect(wire.audio).toHaveBeenCalledWith('silent-pcm');expect(wire.stop).not.toHaveBeenCalled();
+  expect(invoke).not.toHaveBeenCalledWith('audio_command',{command:{op:'stop'}});
+  await wire.receive({type:'input',text:'Next sentence'});await wire.receive({type:'output',text:'다음 문장'});
+  expect(session.original).toBe('Next sentence');expect(session.translation).toBe('다음 문장');
+ });
+ it('preserves capture while reconnecting and clears stale captions and playback',async()=>{
+  await init();settings.key='fixture';await start();await wire.receive({type:'ready'});
+  await wire.receive({type:'input',text:'Old input',languageCode:'en'});await wire.receive({type:'output',text:'이전 출력'});
+  vi.mocked(invoke).mockClear();wire.stop.mockClear();
+  await wire.receive({type:'reconnecting'});wire.capture({payload:{type:'pcm',data:'recovery-pcm'}});
+  expect(session).toMatchObject({phase:'reconnecting',original:'',translation:'',detected:''});
+  expect(wire.audio).toHaveBeenCalledWith('recovery-pcm');
+  expect(invoke).toHaveBeenCalledWith('audio_command',{command:{op:'clear'}});
+  await wire.receive({type:'ready'});wire.capture({payload:{type:'pcm',data:'resumed-pcm'}});
+  expect(session.phase).toBe('listening');expect(wire.audio).toHaveBeenCalledWith('resumed-pcm');
+  expect(wire.stop).not.toHaveBeenCalled();
+  expect(vi.mocked(invoke).mock.calls.filter(([,args])=>['start','stop'].includes((args as any)?.command?.op))).toHaveLength(0);
+  await wire.receive({type:'input',text:'Fresh input'});expect(session.original).toBe('Fresh input');
+ });
+ it('preserves queued playback and captions on planned rotation, then replaces them on the next turn',async()=>{
+  await init();settings.key='fixture';await start();await wire.receive({type:'ready'});
+  await wire.receive({type:'input',text:'Previous sentence',languageCode:'en'});
+  await wire.receive({type:'output',text:'이전 문장'});await wire.receive({type:'audio',data:'queued-speech'});
+  await wire.receive({type:'complete'});vi.mocked(invoke).mockClear();
+  await wire.receive({type:'reconnecting',preserveOutput:true});
+  expect(session).toMatchObject({phase:'reconnecting',original:'Previous sentence',translation:'이전 문장',detected:'en'});
+  wire.capture({payload:{type:'pcm',data:'planned-recovery-pcm'}});
+  expect(wire.audio).toHaveBeenCalledWith('planned-recovery-pcm');
+  await wire.receive({type:'ready'});
+  expect(vi.mocked(invoke).mock.calls.filter(([,args])=>['clear','start','stop'].includes((args as any)?.command?.op))).toHaveLength(0);
+  await wire.receive({type:'interim',text:'Fresh'});expect(session.original).toBe('Fresh');expect(session.detected).toBe('');
+  await wire.receive({type:'input',text:'Fresh sentence'});await wire.receive({type:'output',text:'새 문장'});
+  expect(session.original).toBe('Fresh sentence');expect(session.translation).toBe('새 문장');
+ });
+ it('stops forwarding captured PCM after an explicit stop',async()=>{
+  await init();settings.key='fixture';await start();await wire.receive({type:'ready'});await stop();wire.audio.mockClear();
+  wire.capture({payload:{type:'pcm',data:'late-pcm'}});
+  expect(wire.audio).not.toHaveBeenCalled();expect(session.phase).toBe('idle');
+ });
 });

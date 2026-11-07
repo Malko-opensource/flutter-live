@@ -13,7 +13,7 @@ export function chooseLanguage(side:'first'|'second',code:string){if(locked())re
 export const settings=$state({key:'',source:'microphone',uid:'',skin:'hanbok' as Skin,threshold:-18});
 export const session=$state({mode:'conversation',first:'ko',second:'en',phase:'idle' as Phase,original:'',translation:'',detected:'',error:'',notice:'',voice:true,volume:.7,devices:[] as Device[],testing:false,level:0,db:-96,chunks:0,clip:'idle',overlay:false});
 let initialized=false,capture=false,finishedInput=false,finishedOutput=false,timer:ReturnType<typeof setInterval>|undefined,quiet:ReturnType<typeof setTimeout>|undefined;
-let committedInput='';let loudMs=0;const client=new LiveClient(onLive);
+let committedInput='';let loudMs=0;let captureGeneration=0;const client=new LiveClient(onLive);
 export function active(){return ['connecting','listening','translating','reconnecting'].includes(session.phase)}
 export function locked(){return active()||session.phase==='paused'}
 export function languageStatus(){if(session.mode==='overlay')return '번역 방향 고정';return session.phase==='preview'?'예시 자막':session.detected?`${languages.find(l=>l.code===session.detected)?.label} 감지`:active()?'언어 감지 대기':'언어 자동 감지'}
@@ -34,8 +34,25 @@ export async function syncOverlay(){if(isTauri())await emitTo('overlay','caption
 async function onLive(e:LiveEvent){
  switch(e.type){
   case 'connecting':session.phase='connecting';break;
-  case 'reconnecting':session.phase='reconnecting';session.clip='reconnect';session.original='';session.translation='';session.detected='';committedInput='';finishedInput=false;finishedOutput=false;await safeAudio({op:'clear'});break;
-  case 'ready':session.phase='listening';session.clip='listen';if(!capture){capture=true;try{await audio({op:'volume',value:session.voice?session.volume:0});await audio({op:'start',source:settings.source,uid:settings.uid});}catch{await fail('오디오를 시작하지 못했습니다. macOS 앱에서 다시 시도해 주세요.');}}break;
+  case 'reconnecting':
+   session.phase='reconnecting';session.clip='reconnect';
+   if(e.preserveOutput){
+    // A planned socket rotation must not cut off already scheduled translated speech.
+    finishedInput=true;finishedOutput=true;
+   }else{
+    session.original='';session.translation='';session.detected='';committedInput='';finishedInput=false;finishedOutput=false;await safeAudio({op:'clear'});
+   }break;
+  case 'ready':
+   session.phase='listening';session.clip='listen';
+   if(!capture){
+    capture=true;const generation=captureGeneration;
+    try{
+     await audio({op:'volume',value:session.voice?session.volume:0});
+     // A stop or mode change cancels pending capture setup, even after a new session starts.
+     if(generation!==captureGeneration)return;
+     await audio({op:'start',source:settings.source,uid:settings.uid});
+    }catch{if(generation===captureGeneration)await fail('오디오를 시작하지 못했습니다. macOS 앱에서 다시 시도해 주세요.');}
+   }break;
   case 'interim':
   case 'input':
    if(finishedInput){committedInput='';session.original='';session.detected='';finishedInput=false;}
@@ -52,10 +69,11 @@ async function onLive(e:LiveEvent){
 }
 async function safeAudio(command:Record<string,unknown>){if(isTauri())await audio(command).catch(()=>{});}
 export async function stop(phase:Phase='idle'){
+ ++captureGeneration;
  client.stop();clearInterval(timer);clearTimeout(quiet);capture=false;session.testing=false;session.level=0;session.db=-96;session.chunks=0;session.clip='idle';session.detected='';committedInput='';loudMs=0;session.phase=phase;
  await safeAudio({op:'stop'});await safeAudio({op:'clear'});if(phase==='idle'){session.notice='';session.original='';session.translation='';session.error='';}void syncOverlay();
 }
-async function fail(message:string){await stop('error');session.error=message;}
+async function fail(message:string){session.error=message;await stop('error');}
 export async function start(){if(active())return;await stop();if(!settings.key.trim()){session.error='설정에서 Gemini API 키를 입력해 주세요.';return;}finishedInput=false;finishedOutput=false;client.start({mode:session.mode==='overlay'?'presentation':'conversation',key:settings.key.trim(),firstCode:session.first,secondCode:session.second,first:languages.find(l=>l.code===session.first)!.name,second:languages.find(l=>l.code===session.second)!.name});}
 export async function microphoneTest(uid:string){if(locked())return;await stop();session.testing=true;try{await audio({op:'start',source:'microphone',uid});}catch{await fail('마이크 테스트는 macOS 앱에서 사용할 수 있습니다.');}}
 export async function preview(){
